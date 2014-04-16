@@ -1,0 +1,8 @@
+Import('env')
+
+lenv = env.Clone()
+
+lenv.Append(LIBS = ['joystick'])
+lenv.Append(LIBPATH = lenv.Dir('..'))
+
+lenv.Program('jstest', 'jstest.cc')

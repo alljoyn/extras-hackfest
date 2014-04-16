@@ -1,0 +1,8 @@
+Import('env')
+
+lenv = env.Clone()
+
+lenv.Append(LIBS = 'smsg')
+lenv.Append(LIBPATH = lenv.Dir('..'))
+
+lenv.Program('smsgtest', 'smsgtest.cc')

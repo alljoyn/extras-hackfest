@@ -1,0 +1,8 @@
+Import('env')
+
+lenv = env.Clone()
+
+lenv.Append(LIBS = ['display'])
+lenv.Append(LIBPATH = lenv.Dir('..'))
+
+lenv.Program('displaytest', 'displaytest.cc')
