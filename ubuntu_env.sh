@@ -6,6 +6,7 @@ export CXXFLAGS="-I$ALLJOYN_DIST/cpp/inc \
 		-I$ALLJOYN_DIST/services_common/inc \
 		-I$ALLJOYN_DIST/notification/inc \
 		-I$ALLJOYN_DIST/controlpanel/inc \
+		-I$ALLJOYN_ROOT/services/services_common/cpp/inc/alljoyn/services_common/ \
 		-I$ALLJOYN_ROOT/services/sample_apps/cpp/samples_common/"
 
 export LDFLAGS="-L$ALLJOYN_DIST/cpp/lib \
