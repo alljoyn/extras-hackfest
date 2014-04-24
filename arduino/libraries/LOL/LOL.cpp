@@ -212,51 +212,67 @@ const static uint8_t transformTable[9][14][2] = {
 #define PRESCALE_256  (1 << CS12)
 #define PRESCALE_1024 ((1 << CS12) | (1 << CS10))
 
-#define SCAN_INTERVAL 1000 /* µs */
+#define SCAN_INTERVAL 500 /* µs */
 
 _LOL LOL;
 
-static uint16_t renderBuf[12] = { 0 };
 
-#define SCAN_HIGH 1
 
-#if SCAN_HIGH
-#define SCAN_DRIVE HIGH
-#define DOT_DRIVE LOW
-#else
-#define SCAN_DRIVE LOW
-#define DOT_DRIVE HIGH
-#endif
+typedef struct {
+    uint8_t modes[4];
+    uint8_t outputs[4];
+} scanline_t;
+
+static scanline_t lines[12];
+
+static volatile uint8_t* modeReg1;
+static volatile uint8_t* modeReg2;
+static volatile uint8_t* modeReg3;
+static volatile uint8_t* modeReg4;
+static volatile uint8_t* outputReg1;
+static volatile uint8_t* outputReg2;
+static volatile uint8_t* outputReg3;
+static volatile uint8_t* outputReg4;
+
 
 ISR(TIMER1_COMPA_vect)
 {
-    uint16_t dots;
-    int dot;
-    static int line = 2;
+    static uint8_t line = 0;
+    const uint8_t* modes = lines[line].modes;
+    const uint8_t* outputs = lines[line].outputs;
 
-    for (dot = 2; dot < 14; ++dot) {
-        pinMode(dot, INPUT);
-    }
+    uint8_t oldSREG = SREG;
+    cli();
 
-    dots = renderBuf[line - 2];
+    // Set all pins to inputs first (makes display cleaner)
+    *modeReg1 &= 0x0f;
+    *outputReg1 &= 0x0f;
+    *modeReg2 &= 0x3f;
+    *outputReg2 &= 0x3f;
+    *modeReg3 &= 0x2c;
+    *outputReg3 &= 0x2c;
+    *modeReg4 &= 0xbf;
+    *outputReg4 &= 0xbf;
 
-    pinMode(line, OUTPUT);
-    digitalWrite(line, SCAN_DRIVE);
+    // Now set pins that need to be outputs to outputs and drive them accordingly
+    *modeReg1 |= modes[0];
+    *outputReg1 |= outputs[0];
+    *modeReg2 |= modes[1];
+    *outputReg2 |= outputs[1];
+    *modeReg3 |= modes[2];
+    *outputReg3 |= outputs[2];
+    *modeReg4 |= modes[3];
+    *outputReg4 |= outputs[3];
 
-    for (dot = 2; dot < 14; ++dot) {
-        if (dot != line) {
-            if (bitRead(dots, dot - 2)) {
-                pinMode(dot, OUTPUT);
-                digitalWrite(dot, DOT_DRIVE);
-            }
-        }
-    }
+    SREG = oldSREG;
 
     ++line;
-    if (line >= 14) {
-        line = 2;
+    if (line > 11) {
+        line = 0;
     }
 }
+
+
 
 _LOL::_LOL()
 {
@@ -268,10 +284,19 @@ _LOL::~_LOL()
 
 void _LOL::begin()
 {
-    int pin;
-    for (pin = 2; pin < 14; ++pin) {
+    for (int8_t pin = 2; pin < 14; ++pin) {
         pinMode(pin, INPUT);
     }
+
+    modeReg1 = portModeRegister(2);
+    modeReg2 = portModeRegister(3);
+    modeReg3 = portModeRegister(4);
+    modeReg4 = portModeRegister(5);
+
+    outputReg1 = portOutputRegister(2);
+    outputReg2 = portOutputRegister(3);
+    outputReg3 = portOutputRegister(4);
+    outputReg4 = portOutputRegister(5);
 
     noInterrupts();
     TCCR1A = 0;
@@ -284,16 +309,56 @@ void _LOL::begin()
     interrupts();
 }
 
-void _LOL::render(const uint16_t* bitmap)
+
+void _LOL::end()
 {
-    int row;
-    int col;
-    for (row = 0; row < 9; ++row) {
-        for (col = 0; col < 14; ++col) {
-            bitWrite(renderBuf[transformTable[row][col][SCAN_HIGH - 1]],
-                     transformTable[row][col][SCAN_HIGH],
-                     bitRead(bitmap[row], 13 - col));
-        }
+    noInterrupts();
+    TCCR1A = 0;
+    TCCR1B = 0;
+    TCNT1 = 0;
+    OCR1A = 0;
+    TIMSK1 = 0;
+    interrupts();
+
+    for (int8_t pin = 2; pin < 14; ++pin) {
+        pinMode(pin, INPUT);
     }
 }
 
+
+void _LOL::render(const uint16_t* bitmap)
+{
+    uint16_t renderBuf[12];
+    int i;
+    int j;
+
+    memset(renderBuf, 0, sizeof(renderBuf));
+
+    for (i = 0; i < 9; ++i) {
+        for (j = 0; j < 14; ++j) {
+            bitWrite(renderBuf[transformTable[i][j][0]],
+                     transformTable[i][j][1],
+                     bitRead(bitmap[i], 13 - j));
+        }
+    }
+
+    memset(lines, 0, sizeof(lines));
+    for (i = 0; i < 12; ++i) {
+        uint8_t highPort = digitalPinToPort(i + 2);
+        uint8_t highBit = digitalPinToBitMask(i + 2);
+
+        lines[i].modes[highPort - 2] |= highBit;
+        lines[i].outputs[highPort - 2] |= highBit;
+
+        for (j = 0; j < 12; ++j) {
+            if (i != j) {
+                uint8_t lowPort = digitalPinToPort(j + 2);
+                uint8_t lowBit = digitalPinToBitMask(j + 2);
+
+                if (bitRead(renderBuf[i], j)) {
+                    lines[i].modes[lowPort - 2] |= lowBit;
+                }
+            }
+        }
+    }
+}

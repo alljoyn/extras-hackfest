@@ -27,7 +27,7 @@
 class SMsg
 {
   public:
-    static const int MAX_MSG_LEN = 63;
+    static const int MAX_MSG_LEN = 31;
 
     SMsg();
     ~SMsg();
@@ -36,6 +36,9 @@ class SMsg
      * This must be called in setup().
      */
     void begin();
+
+    void waitLinuxBoot();
+    byte linuxRebooting() { return rebooting; }
 
     int available() { return Serial1.available(); }
 
@@ -63,11 +66,14 @@ class SMsg
     int write(const byte* buf, int len);
 
   private:
-    byte rxseq;
-    byte txseq;
+    byte rebooting;
 
     int readMsg(byte* buf, int len);
     int writeMsg(const byte* buf, int len);
+    int readTO(long to);
+    void flushRX(void);
+    void detectReboot(uint8_t c);
+
 };
 
 

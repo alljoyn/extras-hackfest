@@ -246,21 +246,21 @@ int SPICom::WriteMsg(const uint8_t* buf, uint8_t len)
     uint8_t ack = 0;
     uint8_t i;
 
+    sum.AddByte(len);
     if (!WriteByte(len)) {
         return -1;
     }
-    sum.AddByte(len);
 
+    sum.AddByte(txseq);
     if (!WriteByte(txseq)) {
         return -1;
     }
-    sum.AddByte(txseq);
 
     for (i = 0; i < len; ++i) {
+        sum.AddByte(buf[i]);
         if (!WriteByte(buf[i])) {
             return -1;
         }
-        sum.AddByte(buf[i]);
     }
 
     sumbuf = sum.GetSumMSB();

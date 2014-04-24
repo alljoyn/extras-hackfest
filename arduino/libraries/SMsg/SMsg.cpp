@@ -21,19 +21,11 @@
 
 #include "SMsg.h"
 
-#define MAX_SEQ_NUMBER 0x3f
-
-#define SMSG_ACK 0xc0
-#define SMSG_NACK 0x80
-#define SMSG_ACK_MASK (SMSG_ACK | SMSG_NACK)
-#define SMSG_SEQ_MASK (~SMSG_ACK_MASK)
-
 #define RD_TO 50
 
-#define BAUDRATE 57600
+#define BAUDRATE 250000
 
-
-static int waitRX(long ms)
+static char waitRX(long ms)
 {
     long expire = (long)millis() + ms;
     while (expire - (long)millis() > 0) {
@@ -44,32 +36,16 @@ static int waitRX(long ms)
     return 0;
 }
 
-static void flushRX(void)
-{
-    while (waitRX(10)) {
-        int c = Serial1.read();
-    }
-}
-
-
-static int readTO(long to)
-{
-    if (waitRX(to)) {
-        int c = Serial1.read();
-        return c;
-    }
-    return -1;
-}
 
 static void _write(int c)
 {
+    //Serial.print(" w");
+    //Serial.print(c, HEX);
     Serial1.write(c);
 }
 
 
-SMsg::SMsg():
-    rxseq(0),
-    txseq(0)
+SMsg::SMsg()
 {
 }
 
@@ -80,12 +56,6 @@ SMsg::~SMsg()
 void SMsg::begin(void)
 {
     Serial1.begin(BAUDRATE);
-
-    delay(5000);
-    while (Serial1.available()) {
-        Serial1.flush();
-        delay(1000);
-    }
 }
 
 
@@ -108,52 +78,33 @@ int SMsg::write(const byte* buf, int len)
     return ret;
 }
 
-
-
 int SMsg::readMsg(byte* buf, int len)
 {
     uint16_t sum = 0;
-    int pos = 0;
-    int ack = SMSG_NACK | rxseq;
+    uint8_t pos = 0;
     int plen;
-    int pseq;
     int psumbuf;
-    int i;
+    uint8_t i;
 
     plen = readTO(RD_TO);
     if (plen < 0) {
-        /* no flushing, no acking */
+        /* no flushing */
         return 0;
     }
 
     if (plen == '[') {
-        byte c;
+        char c;
         // Linux kernal message -- ignore
-        do {
-            c = Serial1.read();
-        } while ((c != '\n') && (c != '\r') && waitRX(RD_TO * 2));
+        flushRX();
         return 0;
     }
 
     if ((plen > MAX_MSG_LEN) || (plen > len)) {
         Serial.print("len: ");
         Serial.println(plen, HEX);
-        goto exit;
+        return -1;
     }
     sum += plen * (++pos);
-
-    pseq = readTO(RD_TO);
-    if ((pseq < -1) || (pseq != rxseq)) {
-        Serial.print("seq: ");
-        Serial.print(pseq, HEX);
-        Serial.print(" - ");
-        Serial.println(rxseq, HEX);
-        if ((pseq >= 0) && (pseq <= MAX_SEQ_NUMBER)) {
-            rxseq = pseq;  // assume that our rxseq value is wrong.
-        }
-        goto exit;
-    }
-    sum += pseq * (++pos);
 
     for (i = 0; i < plen; ++i) {
         int c;
@@ -163,7 +114,7 @@ int SMsg::readMsg(byte* buf, int len)
             Serial.print(i, DEC);
             Serial.print("/");
             Serial.println(plen, DEC);
-            goto exit;
+            return -1;
         }
         buf[i] = c;
         sum += c * (++pos);
@@ -175,7 +126,7 @@ int SMsg::readMsg(byte* buf, int len)
         Serial.print(psumbuf, HEX);
         Serial.print(" - ");
         Serial.println((sum >> 8), HEX);
-        goto exit;
+        return -1;
     }
 
     psumbuf = readTO(RD_TO);
@@ -184,18 +135,13 @@ int SMsg::readMsg(byte* buf, int len)
         Serial.print(psumbuf, HEX);
         Serial.print(" - ");
         Serial.println((sum & 0xff), HEX);
-        goto exit;
+        return -1;
     }
-
-    ack |= SMSG_ACK;
-    ++rxseq;
-    rxseq &= MAX_SEQ_NUMBER;
 
 exit:
     flushRX();
-    _write(ack);
 
-    return ((ack & SMSG_ACK_MASK) == SMSG_ACK) ? plen : -1;
+    return plen;
 }
 
 
@@ -203,14 +149,10 @@ int SMsg::writeMsg(const byte* buf, int len)
 {
     uint16_t sum = 0;
     byte pos = 0;
-    int ack;
     int i;
 
     _write(len);
     sum += ((len) * (++pos));
-
-    _write(txseq);
-    sum += txseq * (++pos);
 
     for (i = 0; i < len; ++i) {
         _write(buf[i]);
@@ -220,18 +162,71 @@ int SMsg::writeMsg(const byte* buf, int len)
     _write((sum >> 8) & 0xff);
     _write(sum & 0xff);
 
-    ack = readTO(2 * RD_TO);
-
-    if ((ack < 0) || ((ack & SMSG_ACK_MASK) != SMSG_ACK) || ((ack & SMSG_SEQ_MASK) != txseq)) {
-        if ((ack & SMSG_ACK_MASK) == 0) {
-            flushRX();
-        }
-        return -1;
-    }
-
-    ++txseq;
-    txseq &= MAX_SEQ_NUMBER;
+    delay(RD_TO * 2);
 
     return len;
 }
 
+int SMsg::readTO(long to)
+{
+    if (waitRX(to)) {
+        int c = Serial1.read();
+        //Serial.print(" r");
+        //Serial.print(c, HEX);
+        detectReboot(c);
+        return c;
+    }
+    return -1;
+}
+
+void SMsg::flushRX(void)
+{
+    while (waitRX(RD_TO)) {
+        int c = Serial1.read();
+        detectReboot(c);
+        //Serial.print(" f");
+        //Serial.print(c, HEX);
+    }
+}
+
+
+#define updatePos(_c, _p, _s) (_p) = (((_s)[(_p)] == (_c)) ? ((_p) + 1) : 0)
+#define checkBoot(_p, _s) ((_p) == sizeof(_s) - 1)
+
+void SMsg::detectReboot(uint8_t c)
+{
+    static const char bootStr1[] = "Arduino Yun (ar9331) U-boot";
+    static uint8_t mPos1 = 0;
+
+    updatePos(c, mPos1, bootStr1);
+
+    if (checkBoot(mPos1, bootStr1)) {
+        rebooting = 1;
+    }
+}
+
+void SMsg::waitLinuxBoot()
+{
+    static const char bootDoneStr[] = "--- BOOT DONE ---";
+    uint8_t mPos = 0;
+    long to = millis() + 120000;  // Linux boots should take no longer than 2 minutes.
+    while (((long)millis() - to < 0) && (mPos < sizeof(bootDoneStr) - 1)) {
+        if (Serial1.available()) {
+            char c = Serial1.read();
+            Serial.print(c);
+            if (bootDoneStr[mPos] == c) {
+                ++mPos;
+            } else {
+                mPos = 0;
+            }
+        }
+    }
+    to = millis() + 100;
+    while (((long)millis() - to < 0)) {
+        if (Serial1.available()) {
+            Serial.print((char)Serial1.read());
+            to = millis() + 100;
+        }
+    }
+    rebooting = 0;
+}

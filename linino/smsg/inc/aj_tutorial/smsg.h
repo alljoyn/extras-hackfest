@@ -25,7 +25,7 @@
 
 class SMsg {
   public:
-    static const uint8_t MAX_MSG_LEN = 63;
+    static const uint8_t MAX_MSG_LEN = 31;
 
     SMsg();
     ~SMsg();
@@ -68,7 +68,7 @@ class SMsg {
     bool ReadByte(uint8_t* buf);
     bool WriteByte(const uint8_t buf);
     void FlushRead();
-    bool WaitForMsg();
+    bool WaitForMsg(uint32_t timeout);
 };
 
 

@@ -142,10 +142,10 @@ void loop() {
   for (int d = 0; d < 4; ++d) {
     void (*s)(uint16_t*, uint16_t) = getScrollFunc(d);
     s(testBitmap, getMaxPattern(d) - 1);
-    delay(DELAY * 10);
+    delay(DELAY * 5);
     for (i = 0; i < getMaxScroll(d); ++i) {
       s(testBitmap, 0);
-      delay(DELAY * 10);
+      delay(DELAY * 5);
     }
   }
   delay(3000);

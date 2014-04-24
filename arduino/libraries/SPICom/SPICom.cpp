@@ -179,15 +179,15 @@ int SPICom::writeMsg(const byte* buf, int len)
     int ack;
     int i;
 
-    _write(len);
     sum += ((len) * (++pos));
+    _write(len);
 
-    _write(txseq);
     sum += txseq * (++pos);
+    _write(txseq);
 
     for (i = 0; i < len; ++i) {
-        _write(buf[i]);
         sum += buf[i] * (++pos);
+        _write(buf[i]);
     }
 
     _write((sum >> 8) & 0xff);

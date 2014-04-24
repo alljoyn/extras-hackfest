@@ -36,6 +36,12 @@ class _LOL
     void begin();
 
     /**
+     * Thsi stops the display interrupt.  This must be called when the Linux
+     * side is rebooting otherwise the Linux side may hang during boot.
+     */
+    void end();
+
+    /**
      * Renders the bitmap onto the LOL display.  The bitmap is an array of 9
      * uint16's.  Each uint16 represents one rout of LEDs.  Only the lower 14
      * bits of each uint16 is relevant for display.  The upper 2 bits are
@@ -48,8 +54,6 @@ class _LOL
      * @param bitmap    Bitmap image to be displayed.
      */
     void render(const uint16_t* bitmap);
-
-    void refresh(void);
 };
 
 extern _LOL LOL;

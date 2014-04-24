@@ -2,6 +2,9 @@ include $(TOPDIR)/rules.mk
 
 PKG_NAME:=spicom
 PKG_RELEASE:=1
+PKG_VERSION:=$(shell git log -n 1 --pretty='format:%ci' | cut -d ' ' -f 1)
+
+HF_PKG_SOURCE_DIR:=../../linino/$(PKG_NAME)
 
 include $(INCLUDE_DIR)/package.mk
 

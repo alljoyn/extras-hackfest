@@ -18,31 +18,41 @@
 
 
 //const int buttonMap[]= { 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13 };
-const int buttonMap[]= { 3, 4, 5, 6, 7, 8, 9 };
-//const int buttonMap[]= { 7, 3, 4, 5, 6 };
+//const int buttonMap[]= { 3, 4, 5, 6, 7, 8, 9 };
+const int buttonMap[]= { 7, 3, 4, 5, 6 };
 
 Joystick js(A1, A0, buttonMap, sizeof(buttonMap) / sizeof(buttonMap[0]), 0);
 
 void setup() {
   Serial.begin(9600);
   js.begin();
-  js.setXCal(0, 994);
-  js.setYCal(994, 0);
-  js.setXRange(-16, 16);
-  js.setYRange(-16, 16);
+  //js.setXCal(0, 994, 510);
+  //js.setYCal(994, 0, 492);
+  //js.setXRange(-16, 16);
+  //js.setYRange(-16, 16);
 }
 
+int printnow = 0;
+
 void loop() {
-  if (js.stateChanged()) {
+  int now = millis();
+  if (js.stateChanged() && (now >= printnow)) {
+    printnow = now + 1000;
     int i;
     int xpos = js.readXPos();
     int ypos = js.readYPos();
+    //int xraw = js.readRawXPos();
+    //int yraw = js.readRawYPos();
     unsigned short buttons = js.readButtons();
     Serial.print("x: ");
     Serial.print(xpos);
-    Serial.print("   y: ");
+    Serial.print(" (");
+    //Serial.print(xraw);
+    Serial.print(")   y: ");
     Serial.print(ypos);
-    Serial.print("   buttons[");
+    Serial.print(" (");
+    //Serial.print(yraw);
+    Serial.print(")   buttons[");
     Serial.print(sizeof(buttonMap) / sizeof(buttonMap[0]));
     Serial.print("]:");
     for (i = 0; i < (sizeof(buttonMap) / sizeof(buttonMap[0])); ++i)
@@ -55,5 +65,6 @@ void loop() {
       }
     }
     Serial.println();
+    //js.PrintScale();
   }
 }
