@@ -46,34 +46,14 @@ class Joystick
      *                      input to read as 1.  Set to 0 if pressing a button
      *                      causes the digital input to read as 0.
      */
-    Joystick(int xPin, int yPin, const int* buttonMap, int numButtons, int pressInd);
+    Joystick(uint8_t xPin, uint8_t yPin,
+             uint16_t xMin, uint16_t xMax,
+             uint16_t yMin, uint16_t yMax,
+             const uint8_t* buttonMap, uint8_t numButtons, uint8_t pressInd);
     ~Joystick();
 
     void begin();
-
-    /**
-     * Set the analog read calibration for the X axis.
-     *
-     * @param left      Analog value when the joystick is to the far left
-     *                  position.  Any analog reads that are "more left" than
-     *                  this value will be clamped down to this value.
-     * @param right     Analog value when the joystick is to the far right
-     *                  position.  Any analog reads that are "more right" than
-     *                  this value will be clamped down to this value.
-     */
-    void setXCal(int left, int right);
-
-    /**
-     * Set the analog read calibration for the Y axis.
-     *
-     * @param up        Analog value when the joystick is to the far up
-     *                  position.  Any analog reads that are "more up" than
-     *                  this value will be clamped down to this value.
-     * @param down      Analog value when the joystick is to the far down
-     *                  position.  Any analog reads that are "more down" than
-     *                  this value will be clamped down to this value.
-     */
-    void setYCal(int up, int down);
+    void end();
 
     /**
      * Sets the ouput range for the X axis.
@@ -90,18 +70,6 @@ class Joystick
      * @param down      Output value for maximal down position.
      */
     void setYRange(int up, int down);
-
-
-    int getXCalLeft() const { return xCalOffset; }
-    int getXCalRight() const { return xCalScale + xCalOffset; }
-    int getYCalUp() const { return yCalOffset; }
-    int getYCalDown() const { return yCalScale + yCalOffset; }
-
-
-    int getXOutLeft() const { return xOutOffset; }
-    int getXOutRight() const { return xOutScale + xOutOffset; }
-    int getYOutUp() const { return yOutOffset; }
-    int getYOutDown() const { return yOutScale + yOutOffset; }
 
     void reset();
 
@@ -126,20 +94,7 @@ class Joystick
      *
      * @return  Bitmap of the button press state.
      */
-    unsigned short readButtons(void);
-
-    /**
-     * Identify which buttons changed state since the last read.  This returns
-     * a bitmap of which buttons changed state.  If the bit is set, the
-     * associated button toggled.  If the bit is unset, the associated button
-     * did not change.  Bit 0 is the first button in the buttonMap that was
-     * passed into the constructor.  Bit 1 is the second button inthe
-     * buttonMap, and so on.  This will update the internal state change
-     * detection logic for button press events.
-     *
-     * @return  Bitmap of the button press state.
-     */
-    unsigned short buttonsChanged(void);
+    uint8_t readButtons(void) { return pressIndNormalizer ^ buttonState; }
 
     /**
      * Read the joystick X axis value.
@@ -147,6 +102,7 @@ class Joystick
      * @return  The X axis value.
      */
     int readXPos(void);
+    int readRawXPos(void);
 
     /**
      * Read the joystick Y axis value.
@@ -154,25 +110,45 @@ class Joystick
      * @return  The Y axis value.
      */
     int readYPos(void);
+    int readRawYPos(void);
+
 
   private:
-    int xCalOffset;
-    int xCalScale;
-    int xOutOffset;
-    int xOutScale;
 
-    int yCalOffset;
-    int yCalScale;
-    int yOutOffset;
-    int yOutScale;
+    struct AxisInfo {
+        int calMin;
+        int calMid;
+        int calMax;
 
-    unsigned short oldButtonState;
+        int outMin;
+        int outMax;
+
+        AxisInfo(int calMin, int calMax, int outMin, int outMax):
+            calMin(calMin),
+            calMid((calMax - calMin) / 2),
+            calMax(calMax),
+            outMin(outMin),
+            outMax(outMax)
+        {
+        }
+        void setRange(int min, int max) { outMin = min; outMax = max; }
+        int scaleAnalog(long val);
+    };
+
+    AxisInfo x;
+    AxisInfo y;
+
+    uint8_t buttonState;
     int oldXPos;
     int oldYPos;
 
-    const int xPin;
-    const int yPin;
-    const unsigned short pressIndNormalizer;
+    const uint8_t xPin;
+    const uint8_t yPin;
+    const uint8_t* buttonMap;
+    const uint8_t numButtons;
+    const uint16_t pressIndNormalizer;
+
+    uint8_t* debounceSum;
 
 };
 

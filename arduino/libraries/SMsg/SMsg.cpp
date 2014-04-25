@@ -39,8 +39,6 @@ static char waitRX(long ms)
 
 static void _write(int c)
 {
-    //Serial.print(" w");
-    //Serial.print(c, HEX);
     Serial1.write(c);
 }
 
@@ -100,8 +98,6 @@ int SMsg::readMsg(byte* buf, int len)
     }
 
     if ((plen > MAX_MSG_LEN) || (plen > len)) {
-        Serial.print("len: ");
-        Serial.println(plen, HEX);
         return -1;
     }
     sum += plen * (++pos);
@@ -110,10 +106,6 @@ int SMsg::readMsg(byte* buf, int len)
         int c;
         c = readTO(RD_TO * 2);
         if (c < 0) {
-            Serial.print("payload to: ");
-            Serial.print(i, DEC);
-            Serial.print("/");
-            Serial.println(plen, DEC);
             return -1;
         }
         buf[i] = c;
@@ -122,19 +114,11 @@ int SMsg::readMsg(byte* buf, int len)
 
     psumbuf = readTO(RD_TO);
     if ((psumbuf < 0) || (((sum >> 8) & 0xff) != psumbuf)) {
-        Serial.print("sum H: ");
-        Serial.print(psumbuf, HEX);
-        Serial.print(" - ");
-        Serial.println((sum >> 8), HEX);
         return -1;
     }
 
     psumbuf = readTO(RD_TO);
     if ((psumbuf < 0) || ((sum & 0xff) != psumbuf)) {
-        Serial.print("sum L: ");
-        Serial.print(psumbuf, HEX);
-        Serial.print(" - ");
-        Serial.println((sum & 0xff), HEX);
         return -1;
     }
 
@@ -171,8 +155,6 @@ int SMsg::readTO(long to)
 {
     if (waitRX(to)) {
         int c = Serial1.read();
-        //Serial.print(" r");
-        //Serial.print(c, HEX);
         detectReboot(c);
         return c;
     }
@@ -184,8 +166,6 @@ void SMsg::flushRX(void)
     while (waitRX(RD_TO)) {
         int c = Serial1.read();
         detectReboot(c);
-        //Serial.print(" f");
-        //Serial.print(c, HEX);
     }
 }
 
@@ -196,11 +176,19 @@ void SMsg::flushRX(void)
 void SMsg::detectReboot(uint8_t c)
 {
     static const char bootStr1[] = "Arduino Yun (ar9331) U-boot";
+    static const char bootStr2[] = "## Booting image at 9fea0000 ...";
+    static const char bootStr3[] = "## Transferring control to Linux (at address 80060000) ...";
     static uint8_t mPos1 = 0;
+    static uint8_t mPos2 = 0;
+    static uint8_t mPos3 = 0;
 
     updatePos(c, mPos1, bootStr1);
+    updatePos(c, mPos2, bootStr2);
+    updatePos(c, mPos3, bootStr3);
 
-    if (checkBoot(mPos1, bootStr1)) {
+    if (checkBoot(mPos1, bootStr1) ||
+        checkBoot(mPos2, bootStr2) ||
+        checkBoot(mPos3, bootStr3)) {
         rebooting = 1;
     }
 }
