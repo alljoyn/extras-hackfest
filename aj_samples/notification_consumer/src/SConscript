@@ -1,0 +1,10 @@
+import os
+Import('env')
+
+# Sample programs
+progs = [
+    env.Program('notification_consumer',  Glob('*.cc'))
+]
+
+returnValue = env.Install('$DISTDIR/bin', progs)
+Return ('returnValue')
