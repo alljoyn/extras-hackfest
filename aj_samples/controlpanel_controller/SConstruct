@@ -14,6 +14,20 @@ env = _newEnvironment()
 
 # Defines needed for AllJoyn headers
 env.Append(CXXFLAGS=Split('-DQCC_OS_GROUP_POSIX -DQCC_OS_LINUX'))
+env.Append(CXXFLAGS = ['-Wall',
+                       '-Werror=non-virtual-dtor',
+                       '-pipe',
+                       '-std=gnu++0x',
+                       '-fno-exceptions',
+                       '-fno-strict-aliasing',
+                       '-fno-asynchronous-unwind-tables',
+                       '-fno-unwind-tables',
+                       '-ffunction-sections',
+                       '-fdata-sections',
+                       '-Wno-long-long',
+                       '-Wno-deprecated',
+                       '-Wno-unknown-pragmas'])
+
 env.PrependUnique(LIBS = ['alljoyn_controlpanel','alljoyn_services_common', 'alljoyn_about', 'alljoyn', 'crypto', 'stdc++', 'pthread'])
 
 env.SConscript('SConscript', exports='env')
