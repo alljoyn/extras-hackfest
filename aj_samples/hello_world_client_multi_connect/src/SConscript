@@ -1,0 +1,10 @@
+import os
+Import('env')
+
+# Sample programs
+progs = [
+    env.Program('hello_world_client_multi_connect',  Glob('*.cc'))
+]
+
+returnValue = env.Install('$DISTDIR/bin', progs)
+Return ('returnValue')

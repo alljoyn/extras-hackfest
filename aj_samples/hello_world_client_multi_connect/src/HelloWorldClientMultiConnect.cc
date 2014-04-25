@@ -1,5 +1,5 @@
 /******************************************************************************
- * Copyright (c) 2014, AllSeen Alliance. All rights reserved.
+ * Copyright (c) 2013, AllSeen Alliance. All rights reserved.
  *
  *    Permission to use, copy, modify, and/or distribute this software for any
  *    purpose with or without fee is hereby granted, provided that the above
@@ -17,20 +17,32 @@
 #include <alljoyn/BusAttachment.h>
 #include <alljoyn/about/AboutClient.h>
 #include <alljoyn/about/AnnouncementRegistrar.h>
+#include <qcc/StringUtil.h>
 
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <iostream>
 #include <iomanip>
+#include <vector>
+#include <cstdio>
 
 using namespace ajn;
 using namespace services;
 using namespace qcc;
+using namespace std;
 
 /*constants*/
 static const char* HELLO_WORLD_INTERFACE_NAME = "com.samples.helloworld";
 static qcc::String remoteHelloWorldObjectPath = "";
+
+struct NearbyDevice {
+    qcc::String busName;
+    unsigned short port;
+    qcc::String interestedObjectPath;
+    ajn::SessionId sessionId;  
+};
+static std::vector<NearbyDevice*> deviceList;
 
 static volatile sig_atomic_t quit;
 
@@ -52,17 +64,85 @@ static void SignalHandler(int sig)
 
 typedef void (*AnnounceHandlerCallback)(qcc::String const& busName, unsigned short port);
 
-class HelloWorldClientAnnounceHandler : public ajn::services::AnnounceHandler {
+class AboutClientSessionListener : public ajn::SessionListener {
+private:
+    ajn::SessionId mySessionID;
+    qcc::String serviceName;
+
+public:
+    AboutClientSessionListener(qcc::String const& inServiceNAme) : mySessionID(0), serviceName(inServiceNAme) {}
+
+    virtual ~AboutClientSessionListener() {};
+
+    void SessionLost(ajn::SessionId sessionId)
+    {
+        std::cout << "AboutClient session has been lost for " << serviceName.c_str() << std::endl;
+    }
+};
+
+QStatus makeHelloWorldCall(NearbyDevice* device) {
+    if (false == remoteHelloWorldObjectPath.empty()) {
+        ProxyBusObject remoteObj(*busAttachment, device->busName.c_str(), device->interestedObjectPath.c_str(), device->sessionId);
+        const InterfaceDescription* alljoynTestIntf = busAttachment->GetInterface(HELLO_WORLD_INTERFACE_NAME);
+
+        assert(alljoynTestIntf);
+        remoteObj.AddInterface(*alljoynTestIntf);
+
+        Message reply(*busAttachment);
+        QStatus status = remoteObj.MethodCall(HELLO_WORLD_INTERFACE_NAME, "helloWorld", NULL, 0, reply, 5000);
+
+        if (ER_OK == status) {
+            printf("MethodCall on '%s.%s' succeeded.\n", HELLO_WORLD_INTERFACE_NAME, "helloWorld");
+        } else {
+            printf("MethodCall on '%s.%s' failed.\n", HELLO_WORLD_INTERFACE_NAME, "helloWorld");
+        }
+    }
+}
+
+class AboutClientSessionJoiner : public ajn::BusAttachment::JoinSessionAsyncCB {
+private:
+  qcc::String m_Busname;
+
+public:
+    AboutClientSessionJoiner(const char* name) :
+		m_Busname("")
+	{
+		if (name) {
+			m_Busname.assign(name);
+		}
+	}
+
+    virtual ~AboutClientSessionJoiner() {};
+
+    void JoinSessionCB(QStatus status, SessionId id, const SessionOpts& opts, void* context)
+    {
+        if (status == ER_OK) {
+            NearbyDevice* device = (NearbyDevice*)context;
+            device->sessionId = id;
+            std::cout << "JoinSessionCB(" << m_Busname.c_str() << ") succeeded with id" << id << std::endl;
+            deviceList.push_back(device);
+        } else {
+            std::cout << "JoinSessionCB(" << m_Busname.c_str() << ") failed with status: " << QCC_StatusText(status) << std::endl;
+        }
+
+        delete this;
+    }
+};
+
+class AboutClientAnnounceHandler : public ajn::services::AnnounceHandler {
 private:
   AnnounceHandlerCallback m_Callback;
 
 public:
-    HelloWorldClientAnnounceHandler(AnnounceHandlerCallback callback) : AnnounceHandler(), m_Callback(callback) {};
+    AboutClientAnnounceHandler(AnnounceHandlerCallback callback) : AnnounceHandler(), m_Callback(callback) {};
 
-    virtual ~HelloWorldClientAnnounceHandler() {};
+    virtual ~AboutClientAnnounceHandler() {};
 
     void Announce(unsigned short version, unsigned short port, const char* busName, const ObjectDescriptions& objectDescs, const AboutData& aboutData)
     {
+        NearbyDevice *device = new NearbyDevice();
+        device->busName = busName;
+        device->port = port;
         std::cout << std::endl << std::endl << "***********************************************************************"
                   << std::endl;
         std::cout << "busName  " << busName << std::endl;
@@ -75,6 +155,17 @@ public:
             for (std::vector<qcc::String>::const_iterator itv = vector.begin(); itv != vector.end(); ++itv) {
                 if (0 == itv->compare(HELLO_WORLD_INTERFACE_NAME)) {
                     remoteHelloWorldObjectPath = key;
+                    device->interestedObjectPath = key;
+
+			SessionOpts opts(SessionOpts::TRAFFIC_MESSAGES, false, SessionOpts::PROXIMITY_ANY, TRANSPORT_ANY);
+
+			AboutClientSessionListener* aboutClientSessionListener = new AboutClientSessionListener(busName);
+			AboutClientSessionJoiner* joincb = new AboutClientSessionJoiner(busName);
+
+			QStatus status = busAttachment->JoinSessionAsync(busName,
+						    (ajn::SessionPort)port,
+                                                    aboutClientSessionListener,
+                                                     opts, joincb, device);
                 }
                 std::cout << " value=" << itv->c_str() << std::endl;
             }
@@ -82,95 +173,9 @@ public:
 
         std::cout << "***********************************************************************" << std::endl << std::endl;
 
-        if (m_Callback) {
-            std::cout << "Calling AnnounceHandler Callback" << std::endl;
-            m_Callback(busName, port);
-        }
+
     }
 };
-
-class HelloWorldClientSessionListener : public ajn::SessionListener {
-private:
-  ajn::SessionId mySessionID;
-  qcc::String serviceName;
-
-public:
-
-	HelloWorldClientSessionListener(qcc::String const& inServiceName, ajn::SessionId sessionId) : mySessionID(sessionId), serviceName(inServiceName) {}
-
-    virtual ~HelloWorldClientSessionListener() {};
-
-    void SessionLost(ajn::SessionId sessionId)
-    {
-        std::cout << "HelloWorldClient session has been lost for " << serviceName.c_str() << std::endl;
-    }
-};
-
-class HelloWorldClientSessionJoiner : public ajn::BusAttachment::JoinSessionAsyncCB {
-private:
-	qcc::String m_Busname;
-
-	void makeHelloWorldCall(const qcc::String& uniqueName,
-			SessionId sessionId) {
-		ProxyBusObject remoteObj(*busAttachment, uniqueName.c_str(),
-				remoteHelloWorldObjectPath.c_str(), sessionId);
-		const InterfaceDescription* alljoynTestIntf =
-				busAttachment->GetInterface(HELLO_WORLD_INTERFACE_NAME);
-		assert(alljoynTestIntf);
-		remoteObj.AddInterface(*alljoynTestIntf);
-		Message reply(*busAttachment);
-		QStatus status = remoteObj.MethodCall(HELLO_WORLD_INTERFACE_NAME,
-				"helloWorld", NULL, 0, reply, 5000);
-		if (ER_OK == status) {
-			printf("MethodCall on '%s.%s' succeeded.\n",
-					HELLO_WORLD_INTERFACE_NAME, "helloWorld");
-		} else {
-			printf("MethodCall on '%s.%s' failed.\n",
-					HELLO_WORLD_INTERFACE_NAME, "helloWorld");
-		}
-	}
-
-	void sessionJoinedCallback(qcc::String const& uniqueName, SessionId sessionId)
-	{
-	  busAttachment->EnableConcurrentCallbacks();
-
-	  AboutClient* aboutClient = new AboutClient(*busAttachment);
-	  std::cout << "-----------------------------------" << std::endl;
-	  if (false == remoteHelloWorldObjectPath.empty()) {
-		  std::cout << "Joining session with sessionId " << sessionId << " with " << uniqueName.c_str() << std::endl;
-		  makeHelloWorldCall(uniqueName, sessionId);
-	  }
-
-	  if (aboutClient) {
-		  delete aboutClient;
-		  aboutClient = NULL;
-	  }
-	}
-
-public:
-	HelloWorldClientSessionJoiner(const char* name) :
-	  m_Busname("")
-	{
-	  if (name) {
-		  m_Busname.assign(name);
-	  }
-	}
-
-	virtual ~HelloWorldClientSessionJoiner() {};
-
-	void JoinSessionCB(QStatus status, SessionId id, const SessionOpts& opts, void* context)
-	{
-		if (ER_OK == status) {
-			std::cout << "JoinSessionCB(" << m_Busname.c_str() << ") succeeded with id" << id << std::endl;
-			std::cout << "Calling sessionJoinedCallback" << std::endl;
-			sessionJoinedCallback(m_Busname, id);
-		} else {
-			std::cout << "JoinSessionCB(" << m_Busname.c_str() << ") failed with status: " << QCC_StatusText(status) << std::endl;
-		}
-	}
-
-};
-
 class HelloWorldSignalHandlerBusObject: public BusObject {
 private:
 	const InterfaceDescription::Member* helloWorldSignalMember;
@@ -226,18 +231,48 @@ QStatus BuildBusObject(HelloWorldSignalHandlerBusObject*& helloWorldSignalHandle
 
 void announceHandlerCallback(qcc::String const& busName, unsigned short port)
 {
-    SessionOpts opts(SessionOpts::TRAFFIC_MESSAGES, false, SessionOpts::PROXIMITY_ANY, TRANSPORT_ANY);
+    
+}
 
-    HelloWorldClientSessionListener* sessionListener = new HelloWorldClientSessionListener(busName, (ajn::SessionId) port);
-    HelloWorldClientSessionJoiner* joincb = new HelloWorldClientSessionJoiner(busName.c_str());
+/*
+ * get a line of input from the the file pointer (most likely stdin).
+ * This will capture the the num-1 characters or till a newline character is
+ * entered.
+ *
+ * @param[out] str a pointer to a character array that will hold the user input
+ * @param[in]  num the size of the character array 'str'
+ * @param[in]  fp  the file pointer the sting will be read from. (most likely stdin)
+ *
+ * @return returns the same string as 'str' if there has been a read error a null
+ *                 pointer will be returned and 'str' will remain unchanged.
+ */
+char* get_line(char*str, size_t num, FILE*fp)
+{
+    char*p = fgets(str, num, fp);
 
-    QStatus status = busAttachment->JoinSessionAsync(busName.c_str(), (ajn::SessionPort) port, sessionListener,
-                                                     opts, joincb, NULL);
-
-    if (status != ER_OK) {
-        std::cout << "Unable to JoinSession with " << busName.c_str() << std::endl;
-        return;
+    // fgets will capture the '\n' character if the string entered is shorter than
+    // num. Remove the '\n' from the end of the line and replace it with nul '\0'.
+    if (p != NULL) {
+        size_t last = strlen(str) - 1;
+        if (str[last] == '\n') {
+            str[last] = '\0';
+        }
     }
+    return p;
+}
+
+static String NextTok(String& inStr)
+{
+    String ret;
+    size_t off = inStr.find_first_of(' ');
+    if (off == String::npos) {
+        ret = inStr;
+        inStr.clear();
+    } else {
+        ret = inStr.substr(0, off);
+        inStr = Trim(inStr.substr(off));
+    }
+    return Trim(ret);
 }
 
 /**
@@ -258,6 +293,11 @@ int main(int argc, char**argv, char**envArg)
 //    QCC_SetLogLevels("ALLJOYN_ABOUT_CLIENT=7");
 //    QCC_SetLogLevels("ALLJOYN_ABOUT_ANNOUNCE_HANDLER=7");
 //    QCC_SetLogLevels("ALLJOYN_ABOUT_ANNOUNCEMENT_REGISTRAR=7");
+
+    //set Daemon password only for bundled app
+//    #ifdef QCC_USING_BD
+//    PasswordManager::SetCredentials("ALLJOYN_PIN_KEYX", "000000");
+//    #endif
 
     // QCC_SetLogLevels("ALLJOYN=7;ALL=1");
     struct sigaction act, oldact;
@@ -296,7 +336,7 @@ int main(int argc, char**argv, char**envArg)
     	status = BuildBusObject(helloWorldSignalHandlerBusObject);
     }
 
-    HelloWorldClientAnnounceHandler* announceHandler = new HelloWorldClientAnnounceHandler(announceHandlerCallback);
+    AboutClientAnnounceHandler* announceHandler = new AboutClientAnnounceHandler(announceHandlerCallback);
     if (ER_OK == status) {
     	status = AnnouncementRegistrar::RegisterAnnounceHandler(*busAttachment, *announceHandler);
     }
@@ -314,17 +354,42 @@ int main(int argc, char**argv, char**envArg)
 		std::cout << "Bad status (" << QCC_StatusText(status) << ")." << std::endl;
 	}
 
-    quit = 0;
-    while (!quit) {
-        // Wait for a signal.
-        sigsuspend(&waitmask);
+    const int bufSize = 1024;
+    char buf[bufSize];
+    std::cout << "Usage: list" << std::endl;
+    std::cout << "Usage: call <device index list space seperated>" << std::endl;
+    std::cout << "Usage: quit" << std::endl;
+    while (get_line(buf, bufSize, stdin)) {
+        qcc::String line(buf);
+        qcc::String cmd = NextTok(line);
+        if(cmd == "list") {
+            for (std::vector<NearbyDevice*>::iterator it = deviceList.begin() ; it != deviceList.end(); ++it) {
+                std::cout << std::distance(deviceList.begin(), it) << ": " << (*it)->busName.c_str() << std::endl;
+            }
+        }
+        else if (cmd == "call") {
+            qcc::String qccIndex = NextTok(line);
+            while (!qccIndex.empty()) {
+				int loc = atoi(qccIndex.c_str());
+				makeHelloWorldCall(deviceList[loc]);     
+				qccIndex = NextTok(line);
+			}
+        }
+	else if (cmd == "quit") {
+	    AnnouncementRegistrar::UnRegisterAnnounceHandler(*busAttachment, *announceHandler);
+	    delete announceHandler;
+
+	    busAttachment->Stop();
+	    delete busAttachment;
+
+	    return 0;
+	}
+        else {
+            std::cout << "Usage: list" << std::endl;
+            std::cout << "Usage: call <device index list space seperated>" << std::endl;
+            std::cout << "Usage: quit" << std::endl;
+        }
     }
-
-    AnnouncementRegistrar::UnRegisterAnnounceHandler(*busAttachment, *announceHandler);
-    delete announceHandler;
-
-    busAttachment->Stop();
-    delete busAttachment;
 
     return 0;
 
