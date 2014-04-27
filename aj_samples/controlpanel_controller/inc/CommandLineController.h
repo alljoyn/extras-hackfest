@@ -1,5 +1,5 @@
 /******************************************************************************
- * Copyright (c) 2013, AllSeen Alliance. All rights reserved.
+ * Copyright (c) 2013-2014, AllSeen Alliance. All rights reserved.
  *
  *    Permission to use, copy, modify, and/or distribute this software for any
  *    purpose with or without fee is hereby granted, provided that the above
@@ -68,8 +68,6 @@ class CommandLineController : public ajn::services::ControlPanelListener, public
     void interactWithActionWidget();
 
     void shutdown();
-
-    void announceHandlerCallback(qcc::String const& busName, unsigned short version, unsigned short port, const ajn::services::AnnounceHandler::ObjectDescriptions& objectDescs, const ajn::services::AnnounceHandler::AboutData& aboutData);
 
     virtual void Announce(unsigned short version, unsigned short port, const char* busName, const ObjectDescriptions& objectDescs,
                           const AboutData& aboutData);

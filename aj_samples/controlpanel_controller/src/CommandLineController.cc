@@ -62,6 +62,9 @@ void CommandLineController::initialize()
     ControlPanelPrefix = "/ControlPanel/";
 
     currentState = 0;
+    currentCPDevice = 0;
+    currentCPUnit = 0;
+    currentCP = 0;
 
     // Initialize Service objects
 #ifdef QCC_USING_BD
@@ -69,6 +72,7 @@ void CommandLineController::initialize()
 #endif
 
     controlPanelService = ControlPanelService::getInstance();
+    controlPanelService->setLogLevel(Log::LogLevel::LEVEL_ERROR);
 
     srpKeyXListener = new SrpKeyXListener();
 
@@ -76,27 +80,26 @@ void CommandLineController::initialize()
     if (bus == NULL) {
         std::cout << "Could not initialize BusAttachment." << std::endl;
         shutdown();
+        return;
     }
 
     controlPanelController = new ControlPanelController();
-    //controlPanelListener = new ControlPanelListenerImpl(controlPanelController);
 
     status = controlPanelService->initController(bus, controlPanelController, this);
     if (status != ER_OK) {
         std::cout << "Could not initialize Controller." << std::endl;
         shutdown();
+        return;
     }
 
-    //announceHandler = new AnnounceHandlerImpl(NULL, announceHandlerCallback);
     AnnouncementRegistrar::RegisterAnnounceHandler(*bus, *this);
 
     status = CommonSampleUtil::addSessionlessMatch(bus);
     if (status != ER_OK) {
         std::cout << "Could not add Sessionless Match" << std::endl;
         shutdown();
+        return;
     }
-
-    std::cout << "Finished setup. Waiting for Contollees" << std::endl;
 
     while (1) 
     {
@@ -136,14 +139,32 @@ void CommandLineController::showNearbyDevices()
     int nearbyDeviceIndex = 0;
     string input;
 
+    //if we were previously connected to a control panel, disconnect from it
+    if(currentCPDevice)
+    {
+        if (controlPanelController) {
+            QStatus status = controlPanelController->deleteControllableDevice(currentCPDevice->getDeviceBusName());
+            //std::cout << "    Deleting Controllable Device " << (status == ER_OK ? "succeeded" : "failed") << std::endl;
+            currentCPDevice = 0;
+        }
+    }
+
+    std::map<qcc::String, ajn::MsgArg>::iterator about_data_iter;
+
     std::cout << "====================================================\n";
+    std::cout << "Choose a nearby device to interact with: \n";
     for (std::vector<NearbyDeviceStruct>::iterator it = nearbyDevices.begin() ; it != nearbyDevices.end(); ++it) 
     {
-        std::cout << "== " << nearbyDeviceIndex << " ==> " << it->busName.c_str() << '\n';
+        std::cout << nearbyDeviceIndex+1 << " ==> ";
+        about_data_iter = it->aboutData.find("AppName");
+        std::cout << about_data_iter->second.v_string.str;
+        std::cout << " (" << it->busName.c_str() << ")\n";
         nearbyDeviceIndex++;
     }
-    std::cout << "====================================================\n";
-    std::cout << "Choose a nearby device to interact with (r=refresh): ";
+    std::cout << "r ==> refresh \n";
+    std::cout << "\n";
+    std::cout << "Enter selection: ";
+    
     getline(cin,input);
     
     if(input.compare("r") == 0 || input.compare("R") == 0)
@@ -153,9 +174,19 @@ void CommandLineController::showNearbyDevices()
 
     // Establish a connection with the nearby device
     stringstream(input) >> selection;
-    std::cout << "\nConnecting to nearby device ..." << '\n';
-    currentState = 1; //nearby device chosen, now trying to connect
-    controlPanelController->createControllableDevice(nearbyDevices[selection].busName, nearbyDevices[selection].objectDescs);
+
+    if( (selection >= 1) && (selection <= nearbyDeviceIndex) )
+    { 
+        std::cout << "\nConnecting to nearby device ..." << '\n';
+        currentState = 1; //nearby device chosen, now trying to connect
+        controlPanelController->createControllableDevice(nearbyDevices[selection-1].busName, nearbyDevices[selection-1].objectDescs);
+    }
+    else
+    {
+        //user-entered input is invalid
+        std::cout << "!!Unrecognized input, returning to previous screen!! \n";
+    }
+
 }
 
 void CommandLineController::showUnits()
@@ -163,7 +194,6 @@ void CommandLineController::showUnits()
     std::map<qcc::String, ControlPanelControllerUnit*> units = currentCPDevice->getDeviceUnits();
     std::map<qcc::String, ControlPanelControllerUnit*>::iterator iter;
 
-    std::cout << "Session has been established with device: " << currentCPDevice->getDeviceBusName().c_str() << std::endl;
     m_ConnectedDevices.push_back(currentCPDevice->getDeviceBusName());
 
     string input;
@@ -171,12 +201,14 @@ void CommandLineController::showUnits()
     int unitIndex = 0;
     
     std::cout << "====================================================\n";
+    std::cout << "Choose a unit to interact with: \n";
     for (iter = units.begin(); iter != units.end(); iter++) {
-        std::cout << "== " << unitIndex << " ==> " << iter->first.c_str() << '\n';
+        std::cout << unitIndex+1 << " ==> " << iter->first.c_str() << '\n';
         unitIndex++;       
     }
-    std::cout << "====================================================\n";
-    std::cout << "Choose a unit to interact with (b=go back): ";
+    std::cout << "b ==> go back \n";
+    std::cout << "\n";
+    std::cout << "Enter selection: ";
     getline(cin,input);
 
     if(input.compare("b") == 0 || input.compare("B") == 0)
@@ -187,15 +219,23 @@ void CommandLineController::showUnits()
     }
     stringstream(input) >> selection;
     
-    unitIndex = 0;
-    for (iter = units.begin(); iter != units.end(); iter++) {
-        if(unitIndex == selection) 
-        {
-            currentCPUnit = iter->second;
-            currentState = 3;
-            break;
+    if( (selection >= 1) && (selection <= unitIndex) )
+    {
+        unitIndex = 1; //start at 1 because we display starting at 1
+        for (iter = units.begin(); iter != units.end(); iter++) {
+            if(unitIndex == selection) 
+            {
+                currentCPUnit = iter->second;
+                currentState = 3;
+                break;
+            }
+            unitIndex++;       
         }
-        unitIndex++;       
+    }
+    else
+    {
+        //user-entered input is invalid
+        std::cout << "!!Unrecognized input, returning to previous screen!! \n";
     }
 
 }
@@ -210,15 +250,17 @@ void CommandLineController::showControlPanels()
     int cpIndex = 0;
     
     std::cout << "====================================================\n";
+    std::cout << "Choose a control panel to interact with: \n";
     for (it = controlPanels.begin(); it != controlPanels.end(); it++) {
         std::vector<qcc::String> languages = it->second->getLanguageSet().getLanguages();
         for (size_t i = 0; i < languages.size(); i++) {
-            std::cout << "== " << cpIndex << " ==> " << it->first.c_str() << " (" << languages[i].c_str() << ")" << std::endl;
+            std::cout << cpIndex+1 << " ==> " << it->first.c_str() << " (" << languages[i].c_str() << ")" << std::endl;
             cpIndex++;
         }
     }
-    std::cout << "====================================================\n";
-    std::cout << "Choose a control panel to interact with (b=go back): ";
+    std::cout << "b ==> go back \n";
+    std::cout << "\n";
+    std::cout << "Enter selection: ";
     getline(cin,input);
 
     if(input.compare("b") == 0 || input.compare("B") == 0)
@@ -229,34 +271,46 @@ void CommandLineController::showControlPanels()
     }
     stringstream(input) >> selection;
 
-    cpIndex = 0;
-    for (it = controlPanels.begin(); it != controlPanels.end(); it++) {
-        std::vector<qcc::String> languages = it->second->getLanguageSet().getLanguages();
-        for (size_t i = 0; i < languages.size(); i++) {
-            if(cpIndex == selection) 
-            {
-                currentCP = it->second;
-                currentLanguage = languages[i].c_str();
-                currentState = 4;
-                break;
-            }            
+    if( (selection >= 1) && (selection <= cpIndex) )
+    {
+        cpIndex = 1; //start at 1 because we display starting at 1
+        for (it = controlPanels.begin(); it != controlPanels.end(); it++) {
+            std::vector<qcc::String> languages = it->second->getLanguageSet().getLanguages();
+            for (size_t i = 0; i < languages.size(); i++) {
+                if(cpIndex == selection) 
+                {
+                    currentCP = it->second;
+                    currentLanguage = languages[i].c_str();
+                    currentState = 4;
+                    break;
+                }            
 
-            cpIndex++;
+                cpIndex++;
+            }
         }
     }
+    else
+    {
+        //user-entered input is invalid
+        std::cout << "!!Unrecognized input, returning to previous screen!! \n";
+    }
+
 }
 
 void CommandLineController::showControlPanel()
 {
     Container* rootContainer = currentCP->getRootWidget(currentLanguage);
+    
+    std::cout << "====================================================\n";
     printRootWidget(rootContainer);
     
     int selection;
     string input;
 
     std::cout << "====================================================\n";
-    
-    int index = 0;
+    std::cout << "Choose a widget to interact with: \n";    
+
+    int index = 1;
     for (size_t i = 0; i < propertiesToChange.size(); i++) 
     {
         std::cout << index << " ==> (Property) " << propertiesToChange[i]->getWidgetName().c_str() << std::endl;
@@ -268,8 +322,10 @@ void CommandLineController::showControlPanel()
         index++;
     }
 
-    std::cout << "====================================================\n";
-    std::cout << "Choose a widget to interact with (r=refresh, b=go back): ";
+    std::cout << "b ==> go back \n";
+    std::cout << "r ==> refresh \n";
+    std::cout << "\n";
+    std::cout << "Enter selection: ";
     getline(cin,input);
 
     if(input.compare("b") == 0 || input.compare("B") == 0)
@@ -287,28 +343,35 @@ void CommandLineController::showControlPanel()
 
     stringstream(input) >> selection;
 
-    index = 0;
-    for (size_t i = 0; i < propertiesToChange.size(); i++) 
+    if( (selection >= 1) && (selection <= index) )
     {
-        if(index == selection) 
+        index = 1;
+        for (size_t i = 0; i < propertiesToChange.size(); i++) 
         {
-            propertyToInteract = propertiesToChange[i];
-            currentState = 5;
-            return;
+            if(index == selection) 
+            {
+                propertyToInteract = propertiesToChange[i];
+                currentState = 5;
+                return;
+            }
+            index++;
         }
-        index++;
+        for (size_t i = 0; i < actionsToExecute.size(); i++) 
+        {
+            if(index == selection) 
+            {
+                actionToInteract = actionsToExecute[i];
+                currentState = 6;
+                return;
+            }
+            index++;
+        }
     }
-    for (size_t i = 0; i < actionsToExecute.size(); i++) 
+    else
     {
-        if(index == selection) 
-        {
-            actionToInteract = actionsToExecute[i];
-            currentState = 6;
-            return;
-        }
-        index++;
+        //user-entered input is invalid
+        std::cout << "!!Unrecognized input, returning to previous screen!! \n";
     }
-
 }
 
 void CommandLineController::interactWithPropertyWidget()
@@ -319,23 +382,20 @@ void CommandLineController::interactWithPropertyWidget()
     printBasicWidget(propertyToInteract, "Property", "");
     printPropertyValue(propertyToInteract->getPropertyValue(), propertyToInteract->getPropertyType(), indent);
 
-    //if (property->getUnitOfMeasure().size()) {
-    //    std::cout << indent.c_str() << "Property unitOfMeasure: " << property->getUnitOfMeasure().c_str() << std::endl;
-    // }
     if (propertyToInteract->getConstraintRange()) {
-        std::cout << indent.c_str() << "Property has ConstraintRange: " << std::endl;
+        std::cout << "====================================================\n";
         printConstraintRange(propertyToInteract->getConstraintRange(), propertyToInteract->getPropertyType(), indent + "  ");
 
         getNewValueConstraintRange(propertyToInteract->getConstraintRange(), propertyToInteract->getPropertyType());
     }
     else if (propertyToInteract->getConstraintList().size()) {
-        std::cout << indent.c_str() << "Property has ConstraintList: " << std::endl;
+        std::cout << "====================================================\n";
         printConstraintList(propertyToInteract->getConstraintList(), propertyToInteract->getPropertyType(), indent + "  ");
 
         getNewValueConstraintList(propertyToInteract->getConstraintList(), propertyToInteract->getPropertyType());
     }
     else {
-
+        // no constraints
     }    
 
     currentState = 4;
@@ -343,7 +403,39 @@ void CommandLineController::interactWithPropertyWidget()
 
 void CommandLineController::interactWithActionWidget()
 {
+    qcc::String indent = "";
     std::cout << "*** Interaction with Action Widget ***\n";
+    
+    int selection;
+    string input;
+
+    printBasicWidget(actionToInteract, "Action", "");
+
+    std::cout << "====================================================\n";    
+    std::cout << "1 ==> execute action " << std::endl;
+    std::cout << "b ==> go back \n";
+    std::cout << "\n";
+    std::cout << "Enter selection: ";
+    getline(cin,input);
+    
+    if(input.compare("b") == 0 || input.compare("B") == 0)
+    {
+        currentState = 4;
+        return;
+    }
+
+    stringstream(input) >> selection;
+
+    if(selection == 1)
+    {
+        QStatus status = actionToInteract->executeAction();
+        //std::cout << "    Action execution " << (status == ER_OK ? "succeeded" : "failed") << std::endl;  
+    }
+    else 
+    {
+        std::cout << "!!Unrecognized input, returning to previous screen!! \n";
+    }
+
     currentState = 4;
 }
 
@@ -374,50 +466,6 @@ void CommandLineController::shutdown()
 void CommandLineController::Announce(unsigned short version, unsigned short port, const char* busName, const ObjectDescriptions& objectDescs,
                                    const AboutData& aboutData)
 {
-/*
-    std::cout << std::endl << std::endl << "*********************************************************************************"
-              << std::endl;
-    std::cout << "version  " << version << std::endl;
-    std::cout << "port  " << port << std::endl;
-    std::cout << "busName  " << busName << std::endl;
-    std::cout << "ObjectDescriptions" << std::endl;
-    for (AboutClient::ObjectDescriptions::const_iterator it = objectDescs.begin(); it != objectDescs.end(); ++it) {
-        qcc::String key = it->first;
-        std::vector<qcc::String> vector = it->second;
-        std::cout << "key=" << key.c_str();
-        for (std::vector<qcc::String>::const_iterator itv = vector.begin(); itv != vector.end(); ++itv) {
-            std::cout << " value=" << itv->c_str() << std::endl;
-        }
-    }
-
-    std::cout << "Announcedata" << std::endl;
-    for (AboutClient::AboutData::const_iterator it = aboutData.begin(); it != aboutData.end(); ++it) {
-        qcc::String key = it->first;
-        ajn::MsgArg value = it->second;
-        if (value.typeId == ALLJOYN_STRING) {
-            std::cout << "Key name=" << key.c_str() << " value=" << value.v_string.str << std::endl;
-        } else if (value.typeId == ALLJOYN_BYTE_ARRAY) {
-            std::cout << "Key name=" << key.c_str() << " value:" << std::hex << std::uppercase;
-            uint8_t* AppIdBuffer;
-            size_t numElements;
-            value.Get("ay", &numElements, &AppIdBuffer);
-            for (size_t i = 0; i < numElements; i++) {
-                std::cout << (unsigned int)AppIdBuffer[i];
-            }
-            std::cout << std::nouppercase << std::dec << std::endl;
-        }
-    }
-
-    std::cout << "*********************************************************************************" << std::endl << std::endl;
-
-    std::cout << "Calling AnnounceHandler Callback" << std::endl;
-*/
-    announceHandlerCallback(busName, version, port, objectDescs, aboutData);
-}
-
-void CommandLineController::announceHandlerCallback(qcc::String const& busName, unsigned short version, unsigned short port,
-                                    const AnnounceHandler::ObjectDescriptions& objectDescs, const AnnounceHandler::AboutData& aboutData)
-{
     nearbyDevices.push_back(NearbyDeviceStruct());
     size_t index = nearbyDevices.size() - 1;
     nearbyDevices[index].busName = busName;
@@ -425,8 +473,6 @@ void CommandLineController::announceHandlerCallback(qcc::String const& busName, 
     nearbyDevices[index].port = port;
     nearbyDevices[index].objectDescs = objectDescs;
     nearbyDevices[index].aboutData = aboutData;
-
-    //controlPanelController->createControllableDevice(busName, objectDescs);
 }
 
 void CommandLineController::sessionEstablished(ControlPanelDevice* device)
@@ -464,13 +510,15 @@ void CommandLineController::errorOccured(ControlPanelDevice* device, QStatus sta
 
 void CommandLineController::signalPropertiesChanged(ControlPanelDevice* device, Widget* widget)
 {
-    std::cout << "Received PropertiesChanged Signal for Widget " << widget->getWidgetName().c_str() << std::endl;
+    // not displaying these as it interrupts the visual flow
+    //std::cout << "Received PropertiesChanged Signal for Widget " << widget->getWidgetName().c_str() << std::endl;
 }
 
 void CommandLineController::signalPropertyValueChanged(ControlPanelDevice* device, Property* property)
 {
-    std::cout << "Received ValueChanged Signal for Widget " << property->getWidgetName().c_str() << std::endl;
-    ControllerUtil::printPropertyValue(property->getPropertyValue(), property->getPropertyType());
+    // not displaying these as it interrupts the visual flow
+    //std::cout << "Received ValueChanged Signal for Widget " << property->getWidgetName().c_str() << std::endl;
+    //ControllerUtil::printPropertyValue(property->getPropertyValue(), property->getPropertyType());
 }
 
 void CommandLineController::signalDismiss(ControlPanelDevice* device, NotificationAction* notificationAction)
@@ -480,11 +528,10 @@ void CommandLineController::signalDismiss(ControlPanelDevice* device, Notificati
 
 void CommandLineController::getNewValueConstraintRange(ConstraintRange* constraintRange, PropertyType propertyType)
 {
-        //TODO put in check that newVal is within the constraint range
         string input;        
         QStatus status = ER_OK;  
 
-        std::cout << "====================================================\n";
+        std::cout << "\n";
         std::cout << "Enter a new value from the constraint range: ";
         getline(cin,input);
 
@@ -492,47 +539,64 @@ void CommandLineController::getNewValueConstraintRange(ConstraintRange* constrai
         case UINT16_PROPERTY:
             uint16_t new_uint16;
             stringstream(input) >> new_uint16;
-            status = propertyToInteract->setValue(new_uint16);
+            if( (new_uint16 >= constraintRange->getMinValue().uint16Value) && (new_uint16 <= constraintRange->getMaxValue().uint16Value) )
+                status = propertyToInteract->setValue(new_uint16);
+            else
+                std::cout << "!!Value NOT in constraint range, returning to previous screen!! \n";
             break;
 
         case INT16_PROPERTY:
             int16_t new_int16;
             stringstream(input) >> new_int16;
-            status = propertyToInteract->setValue(new_int16);
+            if( (new_int16 >= constraintRange->getMinValue().int16Value) && (new_int16 <= constraintRange->getMaxValue().int16Value) )
+                status = propertyToInteract->setValue(new_int16);
+            else
+                std::cout << "!!Value NOT in constraint range, returning to previous screen!! \n";
             break;
 
         case UINT32_PROPERTY:
             uint32_t new_uint32;
             stringstream(input) >> new_uint32;
-            status = propertyToInteract->setValue(new_uint32);
+            if( (new_uint32 >= constraintRange->getMinValue().uint32Value) && (new_uint32 <= constraintRange->getMaxValue().uint32Value) )
+                status = propertyToInteract->setValue(new_uint32);
+            else
+                std::cout << "!!Value NOT in constraint range, returning to previous screen!! \n";
             break;
 
         case INT32_PROPERTY:
             int32_t new_int32;
             stringstream(input) >> new_int32;
-            status = propertyToInteract->setValue(new_int32);
+            if( (new_int32 >= constraintRange->getMinValue().int32Value) && (new_int32 <= constraintRange->getMaxValue().int32Value) )
+                status = propertyToInteract->setValue(new_int32);
+            else
+                std::cout << "!!Value NOT in constraint range, returning to previous screen!! \n";
             break;
 
         case UINT64_PROPERTY:
             uint64_t new_uint64;
             stringstream(input) >> new_uint64;
-            status = propertyToInteract->setValue(new_uint64);
+            if( (new_uint64 >= constraintRange->getMinValue().uint64Value) && (new_uint64 <= constraintRange->getMaxValue().uint64Value) )
+                status = propertyToInteract->setValue(new_uint64);
+            else
+                std::cout << "!!Value NOT in constraint range, returning to previous screen!! \n";
             break;
 
         case INT64_PROPERTY:
             int64_t new_int64;
             stringstream(input) >> new_int64;
-            status = propertyToInteract->setValue(new_int64);
+            if( (new_int64 >= constraintRange->getMinValue().int64Value) && (new_int64 <= constraintRange->getMaxValue().int64Value) )
+                status = propertyToInteract->setValue(new_int64);
+            else
+                std::cout << "!!Value NOT in constraint range, returning to previous screen!! \n";
             break;
 
         case DOUBLE_PROPERTY:
             double new_double;
             stringstream(input) >> new_double;
-            status = propertyToInteract->setValue(new_double);
-            break;
-
-        case STRING_PROPERTY:
-            status = propertyToInteract->setValue(stringstream(input).str().c_str());
+            if( (new_double >= constraintRange->getMinValue().doubleValue) && (new_double <= constraintRange->getMaxValue().doubleValue) )
+                status = propertyToInteract->setValue(new_double);
+            else
+                std::cout << "!!Value NOT in constraint range, returning to previous screen!! \n";
             break;
 
         default:
@@ -543,11 +607,12 @@ void CommandLineController::getNewValueConstraintRange(ConstraintRange* constrai
 
 void CommandLineController::getNewValueConstraintList(const std::vector<ConstraintList>& constraintList, PropertyType propertyType)
 {
-        //TODO put in check that newVal is contained in the constraintList
         string input;
+        string new_string;        
         QStatus status = ER_OK;
+        bool validated = false;
 
-        std::cout << "====================================================\n";
+        std::cout << "\n";
         std::cout << "Enter a new value from the constraint list: ";
         getline(cin,input);
 
@@ -555,47 +620,136 @@ void CommandLineController::getNewValueConstraintList(const std::vector<Constrai
         case UINT16_PROPERTY:
             uint16_t new_uint16;
             stringstream(input) >> new_uint16;
-            status = propertyToInteract->setValue(new_uint16);
+
+            for (size_t i = 0; i < constraintList.size(); i++) {
+                if(new_uint16 == constraintList[i].getConstraintValue().uint16Value) {
+                    validated = true;
+                    break;
+                }               
+            }
+
+            if(validated)
+                status = propertyToInteract->setValue(new_uint16);
+            else
+                std::cout << "!!Value NOT in constraint list, returning to previous screen!! \n";
             break;
 
         case INT16_PROPERTY:
             int16_t new_int16;
             stringstream(input) >> new_int16;
-            status = propertyToInteract->setValue(new_int16);
+
+            for (size_t i = 0; i < constraintList.size(); i++) {
+                if(new_int16 == constraintList[i].getConstraintValue().int16Value) {
+                    validated = true;
+                    break;
+                }               
+            }
+
+            if(validated)
+                status = propertyToInteract->setValue(new_int16);
+            else
+                std::cout << "!!Value NOT in constraint list, returning to previous screen!! \n";
             break;
 
         case UINT32_PROPERTY:
             uint32_t new_uint32;
             stringstream(input) >> new_uint32;
-            status = propertyToInteract->setValue(new_uint32);
+
+            for (size_t i = 0; i < constraintList.size(); i++) {
+                if(new_uint32 == constraintList[i].getConstraintValue().uint32Value) {
+                    validated = true;
+                    break;
+                }               
+            }
+
+            if(validated)
+                status = propertyToInteract->setValue(new_uint32);
+            else
+                std::cout << "!!Value NOT in constraint list, returning to previous screen!! \n";
             break;
 
         case INT32_PROPERTY:
             int32_t new_int32;
             stringstream(input) >> new_int32;
-            status = propertyToInteract->setValue(new_int32);
+
+            for (size_t i = 0; i < constraintList.size(); i++) {
+                if(new_int32 == constraintList[i].getConstraintValue().int32Value) {
+                    validated = true;
+                    break;
+                }               
+            }
+
+            if(validated)
+                status = propertyToInteract->setValue(new_int32);
+            else
+                std::cout << "!!Value NOT in constraint list, returning to previous screen!! \n";
             break;
 
         case UINT64_PROPERTY:
             uint64_t new_uint64;
             stringstream(input) >> new_uint64;
-            status = propertyToInteract->setValue(new_uint64);
+
+            for (size_t i = 0; i < constraintList.size(); i++) {
+                if(new_uint64 == constraintList[i].getConstraintValue().uint64Value) {
+                    validated = true;
+                    break;
+                }               
+            }
+
+            if(validated)
+                status = propertyToInteract->setValue(new_uint64);
+            else
+                std::cout << "!!Value NOT in constraint list, returning to previous screen!! \n";
             break;
 
         case INT64_PROPERTY:
             int64_t new_int64;
             stringstream(input) >> new_int64;
-            status = propertyToInteract->setValue(new_int64);
+
+            for (size_t i = 0; i < constraintList.size(); i++) {
+                if(new_int64 == constraintList[i].getConstraintValue().int64Value) {
+                    validated = true;
+                    break;
+                }               
+            }
+
+            if(validated)
+                status = propertyToInteract->setValue(new_int64);
+            else
+                std::cout << "!!Value NOT in constraint list, returning to previous screen!! \n";
             break;
 
         case DOUBLE_PROPERTY:
             double new_double;
             stringstream(input) >> new_double;
-            status = propertyToInteract->setValue(new_double);
+
+            for (size_t i = 0; i < constraintList.size(); i++) {
+                if(new_double == constraintList[i].getConstraintValue().doubleValue) {
+                    validated = true;
+                    break;
+                }               
+            }
+
+            if(validated)
+                status = propertyToInteract->setValue(new_double);
+            else
+                std::cout << "!!Value NOT in constraint list, returning to previous screen!! \n";
             break;
 
         case STRING_PROPERTY:
-            status = propertyToInteract->setValue(stringstream(input).str().c_str());
+            stringstream(input) >> new_string;
+
+            for (size_t i = 0; i < constraintList.size(); i++) {
+                if(new_string.compare(constraintList[i].getConstraintValue().charValue) == 0) {
+                    validated = true;
+                    break;
+                }               
+            }
+
+            if(validated)
+                status = propertyToInteract->setValue(new_string.c_str());
+            else
+                std::cout << "!!Value NOT in constraint list, returning to previous screen!! \n";
             break;
 
         default:
@@ -747,42 +901,42 @@ void CommandLineController::printErrorWidget(Widget* widget, qcc::String const& 
 void CommandLineController::printConstraintList(const std::vector<ConstraintList>& constraintList, PropertyType propertyType, qcc::String const& indent)
 {
     for (size_t i = 0; i < constraintList.size(); i++) {
-        std::cout << indent.c_str() << "ConstraintList " << i << " Display: " << constraintList[i].getDisplay().c_str() << std::endl;
+        std::cout << indent.c_str() << "Display: " << constraintList[i].getDisplay().c_str();
         switch (propertyType) {
         case UINT16_PROPERTY:
-            std::cout << indent.c_str() << "ConstraintList " << i << " Value: " << constraintList[i].getConstraintValue().uint16Value << std::endl;
+            std::cout << " Value: " << constraintList[i].getConstraintValue().uint16Value << std::endl;
             break;
 
         case INT16_PROPERTY:
-            std::cout << indent.c_str() << "ConstraintList " << i << " Value: " << constraintList[i].getConstraintValue().int16Value << std::endl;
+            std::cout << " Value: " << constraintList[i].getConstraintValue().int16Value << std::endl;
             break;
 
         case UINT32_PROPERTY:
-            std::cout << indent.c_str() << "ConstraintList " << i << " Value: " << constraintList[i].getConstraintValue().uint32Value << std::endl;
+            std::cout << " Value: " << constraintList[i].getConstraintValue().uint32Value << std::endl;
             break;
 
         case INT32_PROPERTY:
-            std::cout << indent.c_str() << "ConstraintList " << i << " Value: " << constraintList[i].getConstraintValue().int32Value << std::endl;
+            std::cout << " Value: " << constraintList[i].getConstraintValue().int32Value << std::endl;
             break;
 
         case UINT64_PROPERTY:
-            std::cout << indent.c_str() << "ConstraintList " << i << " Value: " << constraintList[i].getConstraintValue().uint64Value << std::endl;
+            std::cout << " Value: " << constraintList[i].getConstraintValue().uint64Value << std::endl;
             break;
 
         case INT64_PROPERTY:
-            std::cout << indent.c_str() << "ConstraintList " << i << " Value: " << constraintList[i].getConstraintValue().int64Value << std::endl;
+            std::cout << " Value: " << constraintList[i].getConstraintValue().int64Value << std::endl;
             break;
 
         case DOUBLE_PROPERTY:
-            std::cout << indent.c_str() << "ConstraintList " << i << " Value: " << constraintList[i].getConstraintValue().doubleValue << std::endl;
+            std::cout << " Value: " << constraintList[i].getConstraintValue().doubleValue << std::endl;
             break;
 
         case STRING_PROPERTY:
-            std::cout << indent.c_str() << "ConstraintList " << i << " Value: " << constraintList[i].getConstraintValue().charValue << std::endl;
+            std::cout << " Value: " << constraintList[i].getConstraintValue().charValue << std::endl;
             break;
 
         default:
-            std::cout << indent.c_str() << "ConstraintList is unknown property type" << std::endl;
+            std::cout << " Value: " << "ConstraintList is unknown property type" << std::endl;
             break;
         }
     }
@@ -792,45 +946,45 @@ void CommandLineController::printConstraintRange(ConstraintRange* constraintRang
 {
     switch (propertyType) {
     case UINT16_PROPERTY:
-        std::cout << indent.c_str() << "ConstraintRange MinValue: " << constraintRange->getMinValue().uint16Value << std::endl;
-        std::cout << indent.c_str() << "ConstraintRange MaxValue: " << constraintRange->getMaxValue().uint16Value << std::endl;
-        std::cout << indent.c_str() << "ConstraintRange IncrementValue: " << constraintRange->getIncrementValue().uint16Value << std::endl;
+        std::cout << indent.c_str() << "MinValue: " << constraintRange->getMinValue().uint16Value << std::endl;
+        std::cout << indent.c_str() << "MaxValue: " << constraintRange->getMaxValue().uint16Value << std::endl;
+        std::cout << indent.c_str() << "IncrementValue: " << constraintRange->getIncrementValue().uint16Value << std::endl;
         break;
 
     case INT16_PROPERTY:
-        std::cout << indent.c_str() << "ConstraintRange MinValue: " << constraintRange->getMinValue().int16Value << std::endl;
-        std::cout << indent.c_str() << "ConstraintRange MaxValue: " << constraintRange->getMaxValue().int16Value << std::endl;
-        std::cout << indent.c_str() << "ConstraintRange IncrementValue: " << constraintRange->getIncrementValue().int16Value << std::endl;
+        std::cout << indent.c_str() << "MinValue: " << constraintRange->getMinValue().int16Value << std::endl;
+        std::cout << indent.c_str() << "MaxValue: " << constraintRange->getMaxValue().int16Value << std::endl;
+        std::cout << indent.c_str() << "IncrementValue: " << constraintRange->getIncrementValue().int16Value << std::endl;
         break;
 
     case UINT32_PROPERTY:
-        std::cout << indent.c_str() << "ConstraintRange MinValue: " << constraintRange->getMinValue().uint32Value << std::endl;
-        std::cout << indent.c_str() << "ConstraintRange MaxValue: " << constraintRange->getMaxValue().uint32Value << std::endl;
-        std::cout << indent.c_str() << "ConstraintRange IncrementValue: " << constraintRange->getIncrementValue().uint32Value << std::endl;
+        std::cout << indent.c_str() << "MinValue: " << constraintRange->getMinValue().uint32Value << std::endl;
+        std::cout << indent.c_str() << "MaxValue: " << constraintRange->getMaxValue().uint32Value << std::endl;
+        std::cout << indent.c_str() << "IncrementValue: " << constraintRange->getIncrementValue().uint32Value << std::endl;
         break;
 
     case INT32_PROPERTY:
-        std::cout << indent.c_str() << "ConstraintRange MinValue: " << constraintRange->getMinValue().int32Value << std::endl;
-        std::cout << indent.c_str() << "ConstraintRange MaxValue: " << constraintRange->getMaxValue().int32Value << std::endl;
-        std::cout << indent.c_str() << "ConstraintRange IncrementValue: " << constraintRange->getIncrementValue().int32Value << std::endl;
+        std::cout << indent.c_str() << "MinValue: " << constraintRange->getMinValue().int32Value << std::endl;
+        std::cout << indent.c_str() << "MaxValue: " << constraintRange->getMaxValue().int32Value << std::endl;
+        std::cout << indent.c_str() << "IncrementValue: " << constraintRange->getIncrementValue().int32Value << std::endl;
         break;
 
     case UINT64_PROPERTY:
-        std::cout << indent.c_str() << "ConstraintRange MinValue: " << constraintRange->getMinValue().uint64Value << std::endl;
-        std::cout << indent.c_str() << "ConstraintRange MaxValue: " << constraintRange->getMaxValue().uint64Value << std::endl;
-        std::cout << indent.c_str() << "ConstraintRange IncrementValue: " << constraintRange->getIncrementValue().uint64Value << std::endl;
+        std::cout << indent.c_str() << "MinValue: " << constraintRange->getMinValue().uint64Value << std::endl;
+        std::cout << indent.c_str() << "MaxValue: " << constraintRange->getMaxValue().uint64Value << std::endl;
+        std::cout << indent.c_str() << "IncrementValue: " << constraintRange->getIncrementValue().uint64Value << std::endl;
         break;
 
     case INT64_PROPERTY:
-        std::cout << indent.c_str() << "ConstraintRange MinValue: " << constraintRange->getMinValue().int64Value << std::endl;
-        std::cout << indent.c_str() << "ConstraintRange MaxValue: " << constraintRange->getMaxValue().int64Value << std::endl;
-        std::cout << indent.c_str() << "ConstraintRange IncrementValue: " << constraintRange->getIncrementValue().int64Value << std::endl;
+        std::cout << indent.c_str() << "MinValue: " << constraintRange->getMinValue().int64Value << std::endl;
+        std::cout << indent.c_str() << "MaxValue: " << constraintRange->getMaxValue().int64Value << std::endl;
+        std::cout << indent.c_str() << "IncrementValue: " << constraintRange->getIncrementValue().int64Value << std::endl;
         break;
 
     case DOUBLE_PROPERTY:
-        std::cout << indent.c_str() << "ConstraintRange MinValue: " << constraintRange->getMinValue().doubleValue << std::endl;
-        std::cout << indent.c_str() << "ConstraintRange MaxValue: " << constraintRange->getMaxValue().doubleValue << std::endl;
-        std::cout << indent.c_str() << "ConstraintRange IncrementValue: " << constraintRange->getIncrementValue().doubleValue << std::endl;
+        std::cout << indent.c_str() << "MinValue: " << constraintRange->getMinValue().doubleValue << std::endl;
+        std::cout << indent.c_str() << "MaxValue: " << constraintRange->getMaxValue().doubleValue << std::endl;
+        std::cout << indent.c_str() << "IncrementValue: " << constraintRange->getIncrementValue().doubleValue << std::endl;
         break;
 
     default:
