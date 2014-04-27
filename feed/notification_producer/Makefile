@@ -3,7 +3,6 @@ include $(TOPDIR)/rules.mk
 PKG_NAME:=notification_producer
 PKG_RELEASE:=1
 PKG_BUILD_DIR:=$(BUILD_DIR)/$(PKG_NAME)
-PKG_VERSION:=$(shell git log -n 1 --pretty='format:%ci' | cut -d ' ' -f 1)
 
 HF_PKG_SOURCE_DIR:=../../aj_samples/$(PKG_NAME)
 
