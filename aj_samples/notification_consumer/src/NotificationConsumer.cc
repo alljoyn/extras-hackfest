@@ -247,8 +247,6 @@ void NotificationReceiverImpl::Receive(Notification const& notification) {
         std::cout << "******************** End New Message Received ********************" << std::endl << std::endl;
 
         Notification nonConstNotification(notification);
-        // Simply dismiss the notification after printing to console - do not require any user input
-        nonConstNotification.dismiss();
     }
     std::cout << "End handling notification!!!" << std::endl;
 }
