@@ -19,45 +19,28 @@
 #include <alljoyn/about/AnnouncementRegistrar.h>
 
 #include <signal.h>
-#include <stdio.h>
-#include <stdlib.h>
 #include <iostream>
 #include <iomanip>
+#include <cstdio>
 
 using namespace ajn;
 using namespace services;
 using namespace qcc;
 
-/*constants*/
 static const char* HELLO_WORLD_INTERFACE_NAME = "com.samples.helloworld";
 static qcc::String remoteHelloWorldObjectPath = "";
 
 static volatile sig_atomic_t quit;
 
-static BusAttachment* busAttachment;
-
-static void SignalHandler(int sig)
-{
-    switch (sig) {
-    case SIGINT:
-    case SIGTERM:
-        quit = 1;
-        break;
-    }
-}
-
-#define SERVICE_EXIT_OK       0
-#define SERVICE_OPTION_ERROR  1
-#define SERVICE_CONFIG_ERROR  2
-
 typedef void (*AnnounceHandlerCallback)(qcc::String const& busName, unsigned short port);
 
+void makeHelloWorldCall(const qcc::String& uniqueName, SessionId sessionId);
+void connectTo(qcc::String const& busName, unsigned short port);
+
 class HelloWorldClientAnnounceHandler : public ajn::services::AnnounceHandler {
-private:
-  AnnounceHandlerCallback m_Callback;
 
 public:
-    HelloWorldClientAnnounceHandler(AnnounceHandlerCallback callback) : AnnounceHandler(), m_Callback(callback) {};
+    HelloWorldClientAnnounceHandler() : AnnounceHandler() {};
 
     virtual ~HelloWorldClientAnnounceHandler() {};
 
@@ -75,66 +58,24 @@ public:
             for (std::vector<qcc::String>::const_iterator itv = vector.begin(); itv != vector.end(); ++itv) {
                 if (0 == itv->compare(HELLO_WORLD_INTERFACE_NAME)) {
                     remoteHelloWorldObjectPath = key;
+                    connectTo(busName, port);
                 }
                 std::cout << " value=" << itv->c_str() << std::endl;
             }
         }
-
-        std::cout << "***********************************************************************" << std::endl << std::endl;
-
-        if (m_Callback) {
-            std::cout << "Calling AnnounceHandler Callback" << std::endl;
-            m_Callback(busName, port);
-        }
-    }
-};
-
-class HelloWorldClientSessionListener : public ajn::SessionListener {
-private:
-  ajn::SessionId mySessionID;
-  qcc::String serviceName;
-
-public:
-
-	HelloWorldClientSessionListener(qcc::String const& inServiceName, ajn::SessionId sessionId) : mySessionID(sessionId), serviceName(inServiceName) {}
-
-    virtual ~HelloWorldClientSessionListener() {};
-
-    void SessionLost(ajn::SessionId sessionId)
-    {
-        std::cout << "HelloWorldClient session has been lost for " << serviceName.c_str() << std::endl;
     }
 };
 
 class HelloWorldClientSessionJoiner : public ajn::BusAttachment::JoinSessionAsyncCB {
 private:
-	qcc::String m_Busname;
-
-	void makeHelloWorldCall(const qcc::String& uniqueName,
-			SessionId sessionId) {
-		ProxyBusObject remoteObj(*busAttachment, uniqueName.c_str(),
-				remoteHelloWorldObjectPath.c_str(), sessionId);
-		const InterfaceDescription* alljoynTestIntf =
-				busAttachment->GetInterface(HELLO_WORLD_INTERFACE_NAME);
-		assert(alljoynTestIntf);
-		remoteObj.AddInterface(*alljoynTestIntf);
-		Message reply(*busAttachment);
-		QStatus status = remoteObj.MethodCall(HELLO_WORLD_INTERFACE_NAME,
-				"helloWorld", NULL, 0, reply, 5000);
-		if (ER_OK == status) {
-			printf("MethodCall on '%s.%s' succeeded.\n",
-					HELLO_WORLD_INTERFACE_NAME, "helloWorld");
-		} else {
-			printf("MethodCall on '%s.%s' failed.\n",
-					HELLO_WORLD_INTERFACE_NAME, "helloWorld");
-		}
-	}
+	BusAttachment* mBusAttachment;
+	qcc::String mBusname;
 
 	void sessionJoinedCallback(qcc::String const& uniqueName, SessionId sessionId)
 	{
-	  busAttachment->EnableConcurrentCallbacks();
+	  mBusAttachment->EnableConcurrentCallbacks();
 
-	  AboutClient* aboutClient = new AboutClient(*busAttachment);
+	  AboutClient* aboutClient = new AboutClient(*mBusAttachment);
 	  std::cout << "-----------------------------------" << std::endl;
 	  if (false == remoteHelloWorldObjectPath.empty()) {
 		  std::cout << "Joining session with sessionId " << sessionId << " with " << uniqueName.c_str() << std::endl;
@@ -148,11 +89,11 @@ private:
 	}
 
 public:
-	HelloWorldClientSessionJoiner(const char* name) :
-	  m_Busname("")
+	HelloWorldClientSessionJoiner(BusAttachment* bus, const char* name) :
+		mBusAttachment(bus), mBusname("")
 	{
 	  if (name) {
-		  m_Busname.assign(name);
+		  mBusname.assign(name);
 	  }
 	}
 
@@ -161,11 +102,11 @@ public:
 	void JoinSessionCB(QStatus status, SessionId id, const SessionOpts& opts, void* context)
 	{
 		if (ER_OK == status) {
-			std::cout << "JoinSessionCB(" << m_Busname.c_str() << ") succeeded with id" << id << std::endl;
+			std::cout << "JoinSessionCB(" << mBusname.c_str() << ") succeeded with id" << id << std::endl;
 			std::cout << "Calling sessionJoinedCallback" << std::endl;
-			sessionJoinedCallback(m_Busname, id);
+			sessionJoinedCallback(mBusname, id);
 		} else {
-			std::cout << "JoinSessionCB(" << m_Busname.c_str() << ") failed with status: " << QCC_StatusText(status) << std::endl;
+			std::cout << "JoinSessionCB(" << mBusname.c_str() << ") failed with status: " << QCC_StatusText(status) << std::endl;
 		}
 	}
 
@@ -192,46 +133,101 @@ public:
 								const char* sourcePath,
 								Message& msg)
 	{
-		printf("\n\n--==## signalConsumer: HelloWorldSignal Received ##==--\n\n");
+		printf("\n ### signalConsumer: HelloWorldSignal Received ###\n\n");
 	}
 };
 
-QStatus BuildBusObject(HelloWorldSignalHandlerBusObject*& helloWorldSignalHandlerBusObject)
+static BusAttachment* busAttachment = NULL;
+static HelloWorldSignalHandlerBusObject* helloWorldSignalHandlerBusObject = NULL;
+static HelloWorldClientAnnounceHandler* announceHandler = NULL;
+
+static void cleanup()
+{
+    // Clean up
+	if (busAttachment && announceHandler) {
+	    AnnouncementRegistrar::UnRegisterAnnounceHandler(*busAttachment, *announceHandler);
+	}
+	if (announceHandler) {
+		delete announceHandler;
+		announceHandler = NULL;
+	}
+	if (helloWorldSignalHandlerBusObject) {
+		delete helloWorldSignalHandlerBusObject;
+		helloWorldSignalHandlerBusObject = NULL;
+	}
+    if (busAttachment) {
+        delete busAttachment;
+        busAttachment = NULL;
+    }
+}
+
+static void SignalHandler(int sig)
+{
+    switch (sig) {
+    case SIGINT:
+    case SIGTERM:
+        quit = 1;
+        cleanup();
+        break;
+    }
+}
+
+static QStatus BuildBusObject(HelloWorldSignalHandlerBusObject*& helloWorldSignalHandlerBusObject)
 {
     InterfaceDescription* intf = NULL;
     QStatus status = busAttachment->CreateInterface(HELLO_WORLD_INTERFACE_NAME, intf);
+	if (ER_OK != status) {
+		std::cout << "Error in CreateInterface (" << QCC_StatusText(status) << ")." << std::endl;
+		cleanup();
+		return ER_FAIL;
+	}
 
-    if (status == ER_OK) {
-        printf("Interface created.\n");
-        intf->AddMethod("helloWorld", NULL,  NULL, NULL, 0);
-        intf->AddSignal("helloWorldSignal", NULL, NULL, 0);
-        intf->Activate();
+	printf("Interface created.\n");
+	intf->AddMethod("helloWorld", NULL,  NULL, NULL, 0);
+	if (ER_OK != status) {
+		std::cout << "Error in AddMethod (" << QCC_StatusText(status) << ")." << std::endl;
+		cleanup();
+		return ER_FAIL;
+	}
+	intf->AddSignal("helloWorldSignal", NULL, NULL, 0);
+	if (ER_OK != status) {
+		std::cout << "Error in AddSignal (" << QCC_StatusText(status) << ")." << std::endl;
+		cleanup();
+		return ER_FAIL;
+	}
+	intf->Activate();
 
-        helloWorldSignalHandlerBusObject = new HelloWorldSignalHandlerBusObject("/helloWorldSignalHandler");
-        helloWorldSignalHandlerBusObject->Init(intf);
+	helloWorldSignalHandlerBusObject = new HelloWorldSignalHandlerBusObject("/helloWorldSignalHandler");
+	helloWorldSignalHandlerBusObject->Init(intf);
 
-		/* register the signal handler for the the 'helloWorldSignal' */
-		status =  busAttachment->RegisterSignalHandler(helloWorldSignalHandlerBusObject,
-						static_cast<MessageReceiver::SignalHandler>(&HelloWorldSignalHandlerBusObject::HelloWorldSignalHandler),
-						helloWorldSignalHandlerBusObject->GetHelloWorldSignalMember(),
-						NULL);
+	/* register the signal handler for the the 'helloWorldSignal' */
+	status =  busAttachment->RegisterSignalHandler(helloWorldSignalHandlerBusObject,
+					static_cast<MessageReceiver::SignalHandler>(&HelloWorldSignalHandlerBusObject::HelloWorldSignalHandler),
+					helloWorldSignalHandlerBusObject->GetHelloWorldSignalMember(),
+					NULL);
+	if (ER_OK != status) {
+		std::cout << "Error in RegisterSignalHandler (" << QCC_StatusText(status) << ")." << std::endl;
+		cleanup();
+		return ER_FAIL;
+	}
 
-		busAttachment->AddMatch("type='signal',interface='com.samples.helloworld',member='helloWorldSignal'");
-    } else {
-        printf("Failed to create interface '%s'.\n", HELLO_WORLD_INTERFACE_NAME);
-    }
+	busAttachment->AddMatch("type='signal',interface='com.samples.helloworld',member='helloWorldSignal'");
+	if (ER_OK != status) {
+		std::cout << "Error in AddMatch (type='signal') (" << QCC_StatusText(status) << ")." << std::endl;
+		cleanup();
+		return ER_FAIL;
+	}
 
     return status;
 }
 
-void announceHandlerCallback(qcc::String const& busName, unsigned short port)
+void connectTo(qcc::String const& busName, unsigned short port)
 {
     SessionOpts opts(SessionOpts::TRAFFIC_MESSAGES, false, SessionOpts::PROXIMITY_ANY, TRANSPORT_ANY);
 
-    HelloWorldClientSessionListener* sessionListener = new HelloWorldClientSessionListener(busName, (ajn::SessionId) port);
-    HelloWorldClientSessionJoiner* joincb = new HelloWorldClientSessionJoiner(busName.c_str());
+    HelloWorldClientSessionJoiner* joincb = new HelloWorldClientSessionJoiner(busAttachment, busName.c_str());
 
-    QStatus status = busAttachment->JoinSessionAsync(busName.c_str(), (ajn::SessionPort) port, sessionListener,
+    QStatus status = busAttachment->JoinSessionAsync(busName.c_str(), (ajn::SessionPort) port, NULL,
                                                      opts, joincb, NULL);
 
     if (status != ER_OK) {
@@ -240,26 +236,31 @@ void announceHandlerCallback(qcc::String const& busName, unsigned short port)
     }
 }
 
-/**
- *  client main function.
- *
- * @return
- *      - 0 if successful.
- *      - 1 if error.
- */
+void makeHelloWorldCall(const qcc::String& uniqueName,
+		SessionId sessionId) {
+	ProxyBusObject remoteObj(*busAttachment, uniqueName.c_str(),
+			remoteHelloWorldObjectPath.c_str(), sessionId);
+	const InterfaceDescription* alljoynTestIntf =
+			busAttachment->GetInterface(HELLO_WORLD_INTERFACE_NAME);
+	assert(alljoynTestIntf);
+	remoteObj.AddInterface(*alljoynTestIntf);
+	Message reply(*busAttachment);
+	QStatus status = remoteObj.MethodCall(HELLO_WORLD_INTERFACE_NAME,
+			"helloWorld", NULL, 0, reply, 5000);
+	if (ER_OK == status) {
+		printf("MethodCall on '%s.%s' succeeded.\n",
+				HELLO_WORLD_INTERFACE_NAME, "helloWorld");
+	} else {
+		printf("MethodCall on '%s.%s' failed.\n",
+				HELLO_WORLD_INTERFACE_NAME, "helloWorld");
+	}
+}
+
 int main(int argc, char**argv, char**envArg)
 {
-	HelloWorldSignalHandlerBusObject* helloWorldSignalHandlerBusObject;
+	std::cout << "AllJoyn Library version: " << ajn::GetVersion() << std::endl;
+	std::cout << "AllJoyn Library build info: " << ajn::GetBuildInfo() << std::endl;
 
-    QStatus status = ER_OK;
-    std::cout << "AllJoyn Library version: " << ajn::GetVersion() << std::endl;
-    std::cout << "AllJoyn Library build info: " << ajn::GetBuildInfo() << std::endl;
-
-//    QCC_SetLogLevels("ALLJOYN_ABOUT_CLIENT=7");
-//    QCC_SetLogLevels("ALLJOYN_ABOUT_ANNOUNCE_HANDLER=7");
-//    QCC_SetLogLevels("ALLJOYN_ABOUT_ANNOUNCEMENT_REGISTRAR=7");
-
-    // QCC_SetLogLevels("ALLJOYN=7;ALL=1");
     struct sigaction act, oldact;
     sigset_t sigmask, waitmask;
 
@@ -275,57 +276,68 @@ int main(int argc, char**argv, char**envArg)
     sigaction(SIGINT, &act, &oldact);
     sigaction(SIGTERM, &act, &oldact);
 
+    // Create message bus
     busAttachment = new BusAttachment("HelloWorldClient", true);
+    if (NULL == busAttachment) {
+		std::cout << "Could not initialize BusAttachment." << std::endl;
+		return ER_OUT_OF_MEMORY;
+	}
 
-    status = busAttachment->Start();
-    if (status == ER_OK) {
-        std::cout << "BusAttachment started." << std::endl;
-    } else {
-        std::cout << "Unable to start BusAttachment. Status: " << QCC_StatusText(status) << std::endl;
-        return 1;
-    }
+    // Start the BusAttachment
+    QStatus status = busAttachment->Start();
+    if (ER_OK != status) {
+		std::cout << "Failed to start the BusAttachment (" << QCC_StatusText(status) << ")." << std::endl;
+		cleanup();
+		return EXIT_FAILURE;
+	}
 
+	// Connect to the AJ Router
     status = busAttachment->Connect();
-    if (ER_OK == status) {
-        std::cout << "Daemon Connect succeeded." << std::endl;
-    } else {
-        std::cout << "Failed to connect daemon. Status: " << QCC_StatusText(status) << std::endl;
-        return 1;
-    }
-    if (ER_OK == status) {
-    	status = BuildBusObject(helloWorldSignalHandlerBusObject);
-    }
+    if (ER_OK != status) {
+		std::cout << "Failed to connect to AJ Router (" << QCC_StatusText(status) << ")." << std::endl;
+		cleanup();
+		return EXIT_FAILURE;
+	}
 
-    HelloWorldClientAnnounceHandler* announceHandler = new HelloWorldClientAnnounceHandler(announceHandlerCallback);
-    if (ER_OK == status) {
-    	status = AnnouncementRegistrar::RegisterAnnounceHandler(*busAttachment, *announceHandler);
-    }
+	status = BuildBusObject(helloWorldSignalHandlerBusObject);
+	if (ER_OK != status) {
+		std::cout << "Error in BuildBusObject (" << QCC_StatusText(status) << ")." << std::endl;
+		cleanup();
+		return EXIT_FAILURE;
+	}
 
-    if (ER_OK == status) {
-    	status = busAttachment->AddMatch("sessionless='t',type='error'");
-    }
+	announceHandler = new HelloWorldClientAnnounceHandler();
+    if (NULL == announceHandler) {
+		std::cout << "Could not initialize HelloWorldClientAnnounceHandler." << std::endl;
+		cleanup();
+		return ER_OUT_OF_MEMORY;
+	}
+
+    status = AnnouncementRegistrar::RegisterAnnounceHandler(*busAttachment, *announceHandler);
+    if (ER_OK != status) {
+		std::cout << "Error in RegisterAnnounceHandler (" << QCC_StatusText(status) << ")." << std::endl;
+		cleanup();
+		return EXIT_FAILURE;
+	}
+
+	status = busAttachment->AddMatch("sessionless='t',type='error'");
+    if (ER_OK != status) {
+		std::cout << "Error in AddMatch (sessionless='t') (" << QCC_StatusText(status) << ")." << std::endl;
+		cleanup();
+		return EXIT_FAILURE;
+	}
 
     // Setup signals to wait for.
     sigfillset(&waitmask);
     sigdelset(&waitmask, SIGINT);
     sigdelset(&waitmask, SIGTERM);
 
-    if (ER_OK != status) {
-		std::cout << "Bad status (" << QCC_StatusText(status) << ")." << std::endl;
-	}
-
     quit = 0;
     while (!quit) {
         // Wait for a signal.
         sigsuspend(&waitmask);
     }
-
-    AnnouncementRegistrar::UnRegisterAnnounceHandler(*busAttachment, *announceHandler);
-    delete announceHandler;
-
-    busAttachment->Stop();
-    delete busAttachment;
-
+    std::cout << "Goodbye!" << std::endl;
     return 0;
 
 } /* main() */

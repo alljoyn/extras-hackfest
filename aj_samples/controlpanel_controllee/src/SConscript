@@ -1,9 +1,17 @@
 import os
 Import('env')
 
+genobjs = env.SConscript('generated/SConscript', {'env': env})
+providedobjs = env.SConscript('provided/SConscript', {'env': env})
+
+srcs = env.Glob('*.cc')
+objs = env.Object(srcs)
+objs.extend(genobjs)
+objs.extend(providedobjs)
+
 # Sample programs
 progs = [
-    env.Program('controlpanel_controllee',  Glob('*.cc'))
+    env.Program('controlpanel_controllee',  objs)
 ]
 
 returnValue = env.Install('$DISTDIR/bin', progs)

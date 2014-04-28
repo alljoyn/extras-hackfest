@@ -1,5 +1,5 @@
 /******************************************************************************
- * Copyright (c) 2013, AllSeen Alliance. All rights reserved.
+ * Copyright (c) 2014, AllSeen Alliance. All rights reserved.
  *
  *    Permission to use, copy, modify, and/or distribute this software for any
  *    purpose with or without fee is hereby granted, provided that the above
@@ -14,35 +14,19 @@
  *    OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  ******************************************************************************/
 
-#ifndef SRPKEYLISTENER_H_
-#define SRPKEYLISTENER_H_
+#include <qcc/platform.h>
+#include <stdio.h>
+#include <alljoyn/controlpanel/CPSDate.h>
+#include <alljoyn/controlpanel/CPSTime.h>
 
-#include <alljoyn/AuthListener.h>
+#define AJ_Printf(fmat, ...) \
+    do { printf(fmat, ## __VA_ARGS__); } while (0)
 
-/*
- * A listener for Authentication
- */
-class SrpKeyXListener : public ajn::AuthListener {
-  public:
-    SrpKeyXListener();
+uint16_t getCurrentMessage();
+void setCurrentMessage(uint16_t newMode);
 
-    virtual ~SrpKeyXListener();
+void printCurrentMessage();
 
-    void setPassCode(qcc::String const& passCode);
-
-    void setGetPassCode(const char* (*getPassCode)());
-
-    bool RequestCredentials(const char* authMechanism, const char* authPeer, uint16_t authCount, const char* userId,
-                            uint16_t credMask, Credentials& creds);
-
-    void AuthenticationComplete(const char* authMechanism, const char* authPeer, bool success);
-
-  private:
-    qcc::String m_PassCode;
-
-    const char* (*m_GetPassCode)();
-};
-
-#endif /* SRPKEYLISTENER_H_ */
-
+const char* getCounterValueString();
+void setCounterValueString(const char*);
 
