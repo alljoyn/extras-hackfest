@@ -25,13 +25,18 @@ if os.environ.has_key('TARGET_LINKFLAGS'):
 if os.environ.has_key('TARGET_LDFLAGS'):
     env.Append(LDFLAGS=os.environ['TARGET_LDFLAGS'].split())
 
-env.Append(CFLAGS=['-Wall',
+env.Append(CFLAGS=['-Os',
+                   '-Wall',
                    '-pipe',
                    '-funsigned-char',
                    '-Wpointer-sign',
                    '-Wimplicit-function-declaration',
                    '-fno-strict-aliasing'])
-env.Append(CFLAGS='-Os')
+env.Append(CXXFLAGS=['-Os',
+                     '-Wall',
+                     '-pipe',
+                     '-funsigned-char',
+                     '-fno-strict-aliasing'])
 env.Append(LINKFLAGS='-s')
 env.Append(CPPPATH=env.Dir('./inc'));
 env.Append(LIBS = ['smsg'])
