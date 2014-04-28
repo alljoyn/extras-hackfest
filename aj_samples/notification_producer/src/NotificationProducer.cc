@@ -18,15 +18,15 @@
 #include <iostream>
 #include <signal.h>
 #include <alljoyn/BusAttachment.h>
+#include <alljoyn/notification/Notification.h>
+#include <alljoyn/notification/NotificationEnums.h>
 #include <alljoyn/notification/NotificationService.h>
 #include <alljoyn/notification/NotificationSender.h>
 #include <alljoyn/notification/NotificationText.h>
 #include <alljoyn/notification/RichAudioUrl.h>
-#include <alljoyn/notification/NotificationEnums.h>
 #include <alljoyn/about/AboutPropertyStoreImpl.h>
 #include <alljoyn/about/AboutServiceApi.h>
 #include <alljoyn/about/AnnouncementRegistrar.h>
-#include <alljoyn/notification/Notification.h>
 #include <qcc/String.h>
 #include <alljoyn/services_common/LogModulesNames.h>
 
@@ -113,48 +113,46 @@ public:
 
 };
 
-NotificationService* notificationService = 0;
-NotificationSender* notificationSender = 0;
-BusAttachment* busAttachment = 0;
-AboutPropertyStoreImpl* aboutPropertyStore = 0;
-BusListenerImpl*  busListener = 0;
+static BusAttachment* busAttachment = NULL;
+static BusListenerImpl* busListener = NULL;
+static AboutPropertyStoreImpl* aboutPropertyStore = NULL;
+static NotificationService* notificationService = NULL;
+static NotificationSender* notificationSender = NULL;
 
-void cleanup()
+static void cleanup()
 {
     // Clean up
     if (notificationService) {
         notificationService->shutdown();
         notificationService = NULL;
     }
-    if (busAttachment && busListener) {
-        if (busAttachment && busListener) {
-        	busAttachment->UnregisterBusListener(*busListener);
-        	busAttachment->UnbindSessionPort(busListener->getSessionPort());
-        }
-        AboutServiceApi::DestroyInstance();
+    if (aboutPropertyStore) {
+        delete aboutPropertyStore;
+        aboutPropertyStore = NULL;
     }
+	if (busAttachment && busListener) {
+		busAttachment->UnregisterBusListener(*busListener);
+		busAttachment->UnbindSessionPort(busListener->getSessionPort());
+	}
     if (busListener) {
         delete busListener;
         busListener = NULL;
-    }
-    if (aboutPropertyStore) {
-        delete (aboutPropertyStore);
-        aboutPropertyStore = NULL;
     }
     if (busAttachment) {
         delete busAttachment;
         busAttachment = NULL;
     }
-    std::cout << "Goodbye!" << std::endl;
+	AboutServiceApi::DestroyInstance();
 }
 
-void signal_callback_handler(int32_t signum)
+static void SigIntHandler(int32_t signum)
 {
     cleanup();
+    std::cout << "Goodbye!" << std::endl;
     exit(signum);
 }
 
-QStatus FillAboutPropertyStoreImplData(AboutPropertyStoreImpl* propStore)
+static QStatus FillAboutPropertyStoreImplData(AboutPropertyStoreImpl* propStore)
 {
     QStatus status = ER_OK;
 
@@ -171,8 +169,8 @@ QStatus FillAboutPropertyStoreImplData(AboutPropertyStoreImpl* propStore)
 
     CHECK_RETURN(propStore->setAppName("NotificationProducer"))
     CHECK_RETURN(propStore->setModelNumber("Tutorial5000"))
-    CHECK_RETURN(propStore->setDateOfManufacture("10/1/2013"))
-    CHECK_RETURN(propStore->setSoftwareVersion("11.19.43 build 44454"))
+    CHECK_RETURN(propStore->setDateOfManufacture("12/09/2013"))
+    CHECK_RETURN(propStore->setSoftwareVersion("12.20.44 build 44454"))
     CHECK_RETURN(propStore->setAjSoftwareVersion(ajn::GetVersion()))
     CHECK_RETURN(propStore->setHardwareVersion("355.499. b"))
 
@@ -184,7 +182,7 @@ QStatus FillAboutPropertyStoreImplData(AboutPropertyStoreImpl* propStore)
 }
 
 /** Create the session, report the result to stdout, and return the status code. */
-QStatus BindSession(BusListenerImpl& busListener) {
+static QStatus BindSession(BusListenerImpl& busListener) {
     SessionOpts opts(SessionOpts::TRAFFIC_MESSAGES, false, SessionOpts::PROXIMITY_ANY, TRANSPORT_ANY);
     SessionPort sp = SERVICE_PORT;
     QStatus status = busAttachment->BindSessionPort(sp, opts, busListener);
@@ -200,77 +198,93 @@ QStatus BindSession(BusListenerImpl& busListener) {
 
 int main()
 {
+    std::cout << "AllJoyn Library version: " << ajn::GetVersion() << std::endl;
+    std::cout << "AllJoyn Library build info: " << ajn::GetBuildInfo() << std::endl;
+
     // Allow CTRL+C to end application
-    signal(SIGINT, signal_callback_handler);
-
-    // Initialize Service object and Sender Object
-    notificationService = NotificationService::getInstance();
-
-    QCC_SetDebugLevel(logModules::NOTIFICATION_MODULE_LOG_NAME, logModules::ALL_LOG_LEVELS);
+    signal(SIGINT, SigIntHandler);
 
     busAttachment = new BusAttachment("NotificationProducer", true);
+    if (NULL == busAttachment) {
+		std::cout << "Could not initialize BusAttachment." << std::endl;
+		return ER_OUT_OF_MEMORY;
+	}
 
-    /* Start the BusAttachment */
+    // Start the BusAttachment
 	QStatus status = busAttachment->Start();
 	if (ER_OK != status) {
-		delete busAttachment;
-		busAttachment = NULL;
+		std::cout << "Failed to start the BusAttachment (" << QCC_StatusText(status) << ")." << std::endl;
+		cleanup();
+		return EXIT_FAILURE;
 	}
 
+	// Connect to the AJ Router
 	status = busAttachment->Connect();
 	if (ER_OK != status) {
-		delete busAttachment;
-		busAttachment = NULL;
+		std::cout << "Failed to connect to AJ Router (" << QCC_StatusText(status) << ")." << std::endl;
+		cleanup();
+		return EXIT_FAILURE;
 	}
 
-    if (busAttachment == NULL) {
-        std::cout << "Could not initialize BusAttachment." << std::endl;
-        return EXIT_FAILURE;
-    }
-
-	if (ER_OK == status) {
-		aboutPropertyStore = new AboutPropertyStoreImpl();
-		status = FillAboutPropertyStoreImplData(aboutPropertyStore);
+	aboutPropertyStore = new AboutPropertyStoreImpl();
+	status = FillAboutPropertyStoreImplData(aboutPropertyStore);
+	if (ER_OK != status) {
+		std::cout << "Error in FillAboutPropertyStoreImplData (" << QCC_StatusText(status) << ")." << std::endl;
+		cleanup();
+		return EXIT_FAILURE;
 	}
 
 	busListener = new BusListenerImpl();
 	busListener->setSessionPort(SERVICE_PORT);
 	busAttachment->RegisterBusListener(*busListener);
 
-	if (ER_OK == status) {
-		AboutServiceApi::Init(*busAttachment, *aboutPropertyStore);
-		if (!AboutServiceApi::getInstance()) {
-			std::cout << "Could not set up the AboutService." << std::endl;
-			cleanup();
-			return EXIT_FAILURE;
-		}
-	}
-
-	if (ER_OK == status) {
-		status = AboutServiceApi::getInstance()->Register(SERVICE_PORT);
-	}
-	if (ER_OK == status) {
-		status = busAttachment->RegisterBusObject(*AboutServiceApi::getInstance());
-	}
-	if (ER_OK == status) {
-		BindSession(*busListener);
-	}
-	if (ER_OK != status) {
-		std::cout << "Bad status (" << QCC_StatusText(status) << ")." << std::endl;
+	AboutServiceApi::Init(*busAttachment, *aboutPropertyStore);
+	if (NULL == AboutServiceApi::getInstance()) {
+		std::cout << "Could not get an instance of the AboutServiceApi." << std::endl;
 		cleanup();
 		return EXIT_FAILURE;
 	}
 
+	status = AboutServiceApi::getInstance()->Register(SERVICE_PORT);
+	if (ER_OK != status) {
+		std::cout << "Could not register AboutServiceApi service port (" << QCC_StatusText(status) << ")." << std::endl;
+		cleanup();
+		return EXIT_FAILURE;
+	}
+	status = busAttachment->RegisterBusObject(*AboutServiceApi::getInstance());
+	if (ER_OK != status) {
+		std::cout << "Error returned by RegisterBusObject (" << QCC_StatusText(status) << ")." << std::endl;
+		cleanup();
+		return EXIT_FAILURE;
+	}
+	status = BindSession(*busListener);
+	if (ER_OK != status) {
+		std::cout << "Error returned by BindSession (" << QCC_StatusText(status) << ")." << std::endl;
+		cleanup();
+		return EXIT_FAILURE;
+	}
+
+	// Initialize NotificationService object and NotificationSender Object
+    notificationService = NotificationService::getInstance();
+	if (NULL == notificationService) {
+		std::cout << "Could not get an instance of the NotificationService." << std::endl;
+		cleanup();
+		return EXIT_FAILURE;
+	}
+
+	// Set debug level
+    //QCC_SetDebugLevel(logModules::NOTIFICATION_MODULE_LOG_NAME, logModules::ALL_LOG_LEVELS);
+
     notificationSender = notificationService->initSend(busAttachment, aboutPropertyStore);
-    if (!notificationSender) {
-        std::cout << "Could not initialize Sender - exiting application" << std::endl;
+    if (NULL == notificationSender) {
+        std::cout << "Could not initialize NotificationSender" << std::endl;
         cleanup();
         return EXIT_FAILURE;
     }
 
     status = AboutServiceApi::getInstance()->Announce();
     if (ER_OK != status) {
-        std::cout << "Could not announce." << std::endl;
+		std::cout << "Error returned by Announce (" << QCC_StatusText(status) << ")." << std::endl;
         cleanup();
         return EXIT_FAILURE;
     }
@@ -280,7 +294,7 @@ int main()
 
     // Prepare text object, set language and text, add notification to vector
     std::string notificationMessageText;
-    std::cout << "\n\n### Enter message to send in notification: \n\n" << std::endl;
+    std::cout << "\n### Enter message to send in notification: \n" << std::endl;
     getline(std::cin, notificationMessageText);
 
     NotificationText textToSend1(LANG1, notificationMessageText.length() ? notificationMessageText.c_str() : TEXT1);
@@ -299,7 +313,6 @@ int main()
     }
 
     std::cout << "Notification sent! " << std::endl;
-
 
     std::string input;
     do {

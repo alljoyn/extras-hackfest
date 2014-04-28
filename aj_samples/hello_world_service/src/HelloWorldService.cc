@@ -15,9 +15,9 @@
  ******************************************************************************/
 
 #include <alljoyn/BusAttachment.h>
+#include <alljoyn/BusObject.h>
 #include <alljoyn/about/AboutServiceApi.h>
 #include <alljoyn/about/AboutPropertyStoreImpl.h>
-#include <alljoyn/BusObject.h>
 
 #include <signal.h>
 
@@ -30,20 +30,10 @@ using namespace services;
 #define SERVICE_OPTION_ERROR  1
 #define SERVICE_CONFIG_ERROR  2
 
-/*constants*/
 static const char* HELLO_WORLD_INTERFACE_NAME = "com.samples.helloworld";
 static const char* HELLO_WORLD_OBJECT_PATH = "/helloWorld";
 
 static const SessionPort SERVICE_PORT = 25;
-
-static volatile sig_atomic_t s_interrupt = false;
-
-/** Top level message bus object. */
-static BusAttachment* busAttachment = NULL;
-
-static void SigIntHandler(int sig) {
-    s_interrupt = true;
-}
 
 class BusListenerImpl : public ajn::BusListener, public ajn::SessionPortListener {
 private:
@@ -118,7 +108,7 @@ private:
     		}
     	}
     	else {
-    		printf("ERROR - helloWorldSignalMember was NULL!");
+    		printf("ERROR - helloWorldSignalMember was NULL!\n");
     	}
     	return status;
     }
@@ -158,39 +148,54 @@ public:
         if (ER_OK != status) {
             printf("Ping: Error sending reply.\n");
         }
-        printf("Hello World Method!\n");
+        printf("\n ### Hello World Method ###\n\n");
 
         EmitHelloWorldSignal(msg->GetSessionId());
     }
 
 };
 
-/** Start the message bus, report the result to stdout, and return the status code. */
-QStatus StartMessageBus(void) {
-    QStatus status = busAttachment->Start();
+/** Top level message bus object. */
+static BusAttachment* busAttachment = NULL;
+static BusListenerImpl* busListener = NULL;
+static AboutPropertyStoreImpl* aboutPropertyStore = NULL;
+static HelloWorldBusObject* helloWorldBusObject = NULL;
+static volatile sig_atomic_t s_interrupt = false;
 
-    if (ER_OK == status) {
-        std::cout << "BusAttachment started." << std::endl;
-    } else {
-        std::cout << "Start of BusAttachment failed (" << QCC_StatusText(status) << ")." << std::endl;
+static void cleanup()
+{
+	// Clean up
+    if (helloWorldBusObject) {
+    	delete helloWorldBusObject;
+    	helloWorldBusObject = NULL;
     }
-
-    return status;
+    if (aboutPropertyStore) {
+        delete aboutPropertyStore;
+        aboutPropertyStore = NULL;
+    }
+	if (busAttachment && busListener) {
+		busAttachment->UnregisterBusListener(*busListener);
+		busAttachment->UnbindSessionPort(busListener->getSessionPort());
+	}
+	if (busListener) {
+		delete busListener;
+		busListener = NULL;
+	}
+    if (busAttachment) {
+        delete busAttachment;
+        busAttachment = NULL;
+    }
+	AboutServiceApi::DestroyInstance();
 }
 
-/** Connect to the AJ Router, report the result to stdout, and return the status code. */
-QStatus ConnectToAllJoynRouter() {
-    QStatus status;
-    status = busAttachment->Connect();
-    if (ER_OK == status) {
-        std::cout << "AJ Router connect succeeded." << std::endl;
-    } else {
-        std::cout << "Failed to connect to AJ Router (" << QCC_StatusText(status) << ")." << std::endl;
-    }
-    return status;
+static void SigIntHandler(int signum) {
+    s_interrupt = true;
+    cleanup();
+    std::cout << "Goodbye!" << std::endl;
+	exit(signum);
 }
 
-QStatus FillAboutPropertyStoreImplData(AboutPropertyStoreImpl* propStore)
+static QStatus FillAboutPropertyStoreImplData(AboutPropertyStoreImpl* propStore)
 {
     QStatus status = ER_OK;
 
@@ -220,7 +225,7 @@ QStatus FillAboutPropertyStoreImplData(AboutPropertyStoreImpl* propStore)
 }
 
 /** Create the interface, report the result to stdout, and return the result status. */
-QStatus BuildBusObject(HelloWorldBusObject*& helloWorldBusObject)
+static QStatus BuildBusObject(HelloWorldBusObject*& helloWorldBusObject)
 {
     InterfaceDescription* intf = NULL;
     QStatus status = busAttachment->CreateInterface(HELLO_WORLD_INTERFACE_NAME, intf);
@@ -240,7 +245,7 @@ QStatus BuildBusObject(HelloWorldBusObject*& helloWorldBusObject)
 }
 
 /** Create the session, report the result to stdout, and return the status code. */
-QStatus BindSession(BusListenerImpl& busListener) {
+static QStatus BindSession(BusListenerImpl& busListener) {
     SessionOpts opts(SessionOpts::TRAFFIC_MESSAGES, false, SessionOpts::PROXIMITY_ANY, TRANSPORT_ANY);
     SessionPort sp = SERVICE_PORT;
     QStatus status = busAttachment->BindSessionPort(sp, opts, busListener);
@@ -254,28 +259,7 @@ QStatus BindSession(BusListenerImpl& busListener) {
     return status;
 }
 
-static void shutdown(BusListenerImpl& busListener, AboutPropertyStoreImpl*& aboutPropertyStore, HelloWorldBusObject*& helloWorldSampleObject)
-{
-    busAttachment->UnregisterBusListener(busListener);
-    busAttachment->UnbindSessionPort(busListener.getSessionPort());
-
-    AboutServiceApi::DestroyInstance();
-
-    if (aboutPropertyStore) {
-        delete aboutPropertyStore;
-        aboutPropertyStore = NULL;
-    }
-
-    if (helloWorldSampleObject) {
-    	delete helloWorldSampleObject;
-    	helloWorldSampleObject = NULL;
-    }
-
-    delete busAttachment;
-    busAttachment = NULL;
-}
-
-void WaitForSigInt(void) {
+static void WaitForSigInt(void) {
     while (s_interrupt == false) {
 #ifdef _WIN32
         Sleep(100);
@@ -286,89 +270,110 @@ void WaitForSigInt(void) {
 }
 
 int main(int argc, char**argv, char**envArg) {
-    QStatus status = ER_OK;
     std::cout << "AllJoyn Library version: " << ajn::GetVersion() << std::endl;
     std::cout << "AllJoyn Library build info: " << ajn::GetBuildInfo() << std::endl;
-    //QCC_SetLogLevels("ALLJOYN_ABOUT_SERVICE=7;");
 
-    BusListenerImpl busListener;
-    busListener.setSessionPort(SERVICE_PORT);
-
-    /* Install SIGINT handler so Ctrl + C deallocates memory properly */
+    // Install SIGINT handler so Ctrl + C deallocates memory properly
     signal(SIGINT, SigIntHandler);
 
-    /* Create message bus */
+    // Create message bus
     busAttachment = new BusAttachment("HelloWorldService", true);
-
-    if (!busAttachment) {
-        status = ER_OUT_OF_MEMORY;
-        return status;
+    if (NULL == busAttachment) {
+    	std::cout << "Could not initialize BusAttachment." << std::endl;
+        return ER_OUT_OF_MEMORY;
     }
 
-    if (ER_OK == status) {
-        status = StartMessageBus();
-    }
-
-    if (ER_OK == status) {
-        status = ConnectToAllJoynRouter();
-    }
-
-    if (ER_OK == status) {
-        busAttachment->RegisterBusListener(busListener);
-    }
-
-    AboutPropertyStoreImpl* aboutPropertyStore = NULL;
-    HelloWorldBusObject* helloWorldBusObject = NULL;
-
-    if (ER_OK == status) {
-        aboutPropertyStore = new AboutPropertyStoreImpl();
-        status = FillAboutPropertyStoreImplData(aboutPropertyStore);
-    }
+    // Start the BusAttachment
+	QStatus status = busAttachment->Start();
 	if (ER_OK != status) {
-		shutdown(busListener, aboutPropertyStore, helloWorldBusObject);
+		std::cout << "Failed to start the BusAttachment (" << QCC_StatusText(status) << ")." << std::endl;
+		cleanup();
+		return EXIT_FAILURE;
+	}
+
+	// Connect to the AJ Router
+	status = busAttachment->Connect();
+	if (ER_OK != status) {
+		std::cout << "Failed to connect to AJ Router (" << QCC_StatusText(status) << ")." << std::endl;
+		cleanup();
+		return EXIT_FAILURE;
+	}
+
+	busListener = new BusListenerImpl();
+	busListener->setSessionPort(SERVICE_PORT);
+	busAttachment->RegisterBusListener(*busListener);
+
+	aboutPropertyStore = new AboutPropertyStoreImpl();
+	status = FillAboutPropertyStoreImplData(aboutPropertyStore);
+	if (ER_OK != status) {
+		std::cout << "Error in FillAboutPropertyStoreImplData (" << QCC_StatusText(status) << ")." << std::endl;
+		cleanup();
 		return EXIT_FAILURE;
 	}
 
 	AboutServiceApi::Init(*busAttachment, *aboutPropertyStore);
-	if (!AboutServiceApi::getInstance()) {
-		shutdown(busListener, aboutPropertyStore, helloWorldBusObject);
+	if (NULL == AboutServiceApi::getInstance()) {
+		std::cout << "Could not get an instance of the AboutServiceApi." << std::endl;
+		cleanup();
 		return EXIT_FAILURE;
 	}
 
-	AboutServiceApi::getInstance()->Register(SERVICE_PORT);
+	status = AboutServiceApi::getInstance()->Register(SERVICE_PORT);
+	if (ER_OK != status) {
+		std::cout << "Could not register AboutServiceApi service port (" << QCC_StatusText(status) << ")." << std::endl;
+		cleanup();
+		return EXIT_FAILURE;
+	}
+
 	status = busAttachment->RegisterBusObject(*AboutServiceApi::getInstance());
+	if (ER_OK != status) {
+		std::cout << "Error returned by RegisterBusObject(AboutServiceApi) (" << QCC_StatusText(status) << ")." << std::endl;
+		cleanup();
+		return EXIT_FAILURE;
+	}
 
 	std::vector<qcc::String> interfaces;
 	interfaces.push_back(HELLO_WORLD_INTERFACE_NAME);
 	status = AboutServiceApi::getInstance()->AddObjectDescription(HELLO_WORLD_OBJECT_PATH, interfaces);
-
-	if (ER_OK == status) {
-		status = BuildBusObject(helloWorldBusObject);
-	}
-	if (ER_OK == status) {
-		status = busAttachment->RegisterBusObject(*helloWorldBusObject);
+	if (ER_OK != status) {
+		std::cout << "Error returned by AddObjectDescription (" << QCC_StatusText(status) << ")." << std::endl;
+		cleanup();
+		return EXIT_FAILURE;
 	}
 
-    if (ER_OK == status) {
-        status = BindSession(busListener);
-    }
+	status = BuildBusObject(helloWorldBusObject);
+	if (ER_OK != status) {
+		std::cout << "Error returned by BuildBusObject (" << QCC_StatusText(status) << ")." << std::endl;
+		cleanup();
+		return EXIT_FAILURE;
+	}
 
-    if (ER_OK == status) {
-        status = AboutServiceApi::getInstance()->Announce();
-    }
+	status = busAttachment->RegisterBusObject(*helloWorldBusObject);
+	if (ER_OK != status) {
+		std::cout << "Error returned by RegisterBusObject(helloWorldBusObject) (" << QCC_StatusText(status) << ")." << std::endl;
+		cleanup();
+		return EXIT_FAILURE;
+	}
 
-    /* Perform the service asynchronously until the user signals for an exit. */
-    if (ER_OK == status) {
-        WaitForSigInt();
-    }
-    else {
-    	std::cout << "Bad status (" << QCC_StatusText(status) << ")." << std::endl;
-    }
+	status = BindSession(*busListener);
+	if (ER_OK != status) {
+		std::cout << "Error returned by BindSession (" << QCC_StatusText(status) << ")." << std::endl;
+		cleanup();
+		return EXIT_FAILURE;
+	}
 
-    shutdown(busListener, aboutPropertyStore, helloWorldBusObject);
+	status = AboutServiceApi::getInstance()->Announce();
+	if (ER_OK != status) {
+		std::cout << "Error returned by Announce (" << QCC_StatusText(status) << ")." << std::endl;
+		cleanup();
+		return EXIT_FAILURE;
+	}
+
+    // Perform the service asynchronously until the user signals for an exit
+	WaitForSigInt();
 
     return 0;
-} /* main() */
+} // main()
 
 
 

@@ -20,6 +20,7 @@
 #include <signal.h>
 #include <sstream>
 #include <vector>
+#include <alljoyn/BusAttachment.h>
 #include <alljoyn/about/AnnouncementRegistrar.h>
 #include <alljoyn/notification/Notification.h>
 #include <alljoyn/notification/NotificationReceiver.h>
@@ -29,53 +30,9 @@
 #include <alljoyn/services_common/LogModulesNames.h>
 #include <alljoyn/Status.h>
 
-
 using namespace ajn;
 using namespace services;
 using namespace qcc;
-
-class NotificationReceiverImpl;
-
-NotificationService* notificationService = 0;
-NotificationReceiverImpl* notificationReceiver = 0;
-ajn::BusAttachment* busAttachment = 0;
-static volatile sig_atomic_t s_interrupt = false;
-
-void cleanup()
-{
-    std::cout << "cleanup() - start" << std::endl;
-    if (notificationService) {
-        notificationService->shutdown();
-    }
-    if (notificationReceiver) {
-        delete notificationReceiver;
-    }
-    if (busAttachment) {
-        delete busAttachment;
-    }
-    std::cout << "cleanup() - end" << std::endl;
-}
-
-void signal_callback_handler(int32_t signum)
-{
-    std::cout << "got signal_callback_handler" << std::endl;
-    cleanup();
-    s_interrupt = true;
-    std::cout << "Goodbye!" << std::endl;
-    exit(signum);
-}
-
-bool WaitForSigInt(int32_t sleepTime) {
-    if (s_interrupt == false) {
-#ifdef _WIN32
-        Sleep(100);
-#else
-        sleep(sleepTime);
-#endif
-        return false;
-    }
-    return true;
-}
 
 /**
  * Class that will receive Notifications. Implements NotificationReceiver
@@ -281,21 +238,62 @@ void NotificationReceiverImpl::SetNotificationAction(NotificationReceiverImpl::N
     }
 }
 
+static NotificationService* notificationService = NULL;
+static NotificationReceiverImpl* notificationReceiver = NULL;
+static BusAttachment* busAttachment = NULL;
+static volatile sig_atomic_t s_interrupt = false;
+
+static void cleanup()
+{
+    if (notificationService) {
+        notificationService->shutdown();
+        notificationService = NULL;
+    }
+    if (notificationReceiver) {
+        delete notificationReceiver;
+        notificationReceiver = NULL;
+    }
+    if (busAttachment) {
+        delete busAttachment;
+        busAttachment = NULL;
+    }
+}
+
+static void SigIntHandler(int32_t signum)
+{
+    cleanup();
+    s_interrupt = true;
+    std::cout << "Goodbye!" << std::endl;
+    exit(signum);
+}
+
+static bool WaitForSigInt(int32_t sleepTime) {
+    if (s_interrupt == false) {
+#ifdef _WIN32
+        Sleep(100);
+#else
+        sleep(sleepTime);
+#endif
+        return false;
+    }
+    return true;
+}
+
 int main()
 {
+    std::cout << "AllJoyn Library version: " << ajn::GetVersion() << std::endl;
+    std::cout << "AllJoyn Library build info: " << ajn::GetBuildInfo() << std::endl;
+
     // Allow CTRL+C to end application
-    signal(SIGINT, signal_callback_handler);
+    signal(SIGINT, SigIntHandler);
 
-    // Initialize Service object
-    notificationService = NotificationService::getInstance();
-
-    // change loglevel to debug:
-    QCC_SetDebugLevel(logModules::NOTIFICATION_MODULE_LOG_NAME, logModules::ALL_LOG_LEVELS);
-
-    notificationReceiver = new NotificationReceiverImpl(false);
     busAttachment = new BusAttachment("NotificationConsumer", true);
+    if (NULL == busAttachment) {
+		std::cout << "Could not initialize BusAttachment." << std::endl;
+		return ER_OUT_OF_MEMORY;
+	}
 
-    /* Start the BusAttachment */
+    // Start the BusAttachment
     QStatus status = busAttachment->Start();
     if (status != ER_OK) {
         delete busAttachment;
@@ -313,16 +311,34 @@ int main()
         return EXIT_FAILURE;
     }
 
+    // Initialize Service object
+    notificationService = NotificationService::getInstance();
+    if (NULL == notificationService) {
+		std::cout << "Could not get an instance of the NotificationService." << std::endl;
+		cleanup();
+		return EXIT_FAILURE;
+	}
+
+    // Set debug level
+    //QCC_SetDebugLevel(logModules::NOTIFICATION_MODULE_LOG_NAME, logModules::ALL_LOG_LEVELS);
+
+    notificationReceiver = new NotificationReceiverImpl(false);
+    if (NULL == notificationReceiver) {
+		std::cout << "Could not initialize NotificationReceiver" << std::endl;
+		cleanup();
+		return EXIT_FAILURE;
+	}
+
     status = notificationService->initReceive(busAttachment, notificationReceiver);
-    if (status != ER_OK) {
+    if (ER_OK != status) {
         std::cout << "Could not initialize receiver." << std::endl;
         cleanup();
         return EXIT_FAILURE;
     }
 
     status = busAttachment->AddMatch("sessionless='t',type='error'");
-    if (status != ER_OK) {
-        std::cout << "Could not add sessionless match." << std::endl;
+    if (ER_OK != status) {
+    	std::cout << "Error returned by AddMatch (" << QCC_StatusText(status) << ")." << std::endl;        cleanup();
         cleanup();
         return EXIT_FAILURE;
     }
