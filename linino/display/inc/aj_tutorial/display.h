@@ -48,7 +48,8 @@ class Display
      *
      * @return  true if successfully cleared, false otherwise (communication error)
      */
-    bool ClearDisplay();
+    bool ClearDisplayBuffer();
+    bool ClearDisplay() { return ClearDisplayBuffer() && SendDisplay(); }
 
     /**
      * Turn an individual LED on or off.
@@ -59,7 +60,8 @@ class Display
      *
      * @return  true if successfully cleared, false otherwise (bad coordinate or communication error)
      */
-    bool DrawPoint(uint8_t x, uint8_t y, bool on = true);
+    bool DrawPointBuffer(uint8_t x, uint8_t y, bool on = true);
+    bool DrawPoint(uint8_t x, uint8_t y, bool on = true) { return DrawPointBuffer(x, y, on) && SendDisplay(); }
 
     /**
      * Turns a line of LEDs on or off.
@@ -72,7 +74,11 @@ class Display
      *
      * @return  true if successfully cleared, false otherwise (bad coordinate or communication error)
      */
-    bool DrawLine(uint8_t x1, uint8_t y1, uint8_t x2, uint8_t y2, bool on = true);
+    bool DrawLineBuffer(uint8_t x1, uint8_t y1, uint8_t x2, uint8_t y2, bool on = true);
+    bool DrawLine(uint8_t x1, uint8_t y1, uint8_t x2, uint8_t y2, bool on = true)
+    {
+        return DrawLineBuffer(x1, y1, x2, y2, on) && SendDisplay();
+    }
 
     /**
      * Turns a box of LEDs on or off.
@@ -86,7 +92,11 @@ class Display
      *
      * @return  true if successfully cleared, false otherwise (bad coordinate or communication error)
      */
-    bool DrawBox(uint8_t x1, uint8_t y1, uint8_t x2, uint8_t y2, bool on = true, bool fill = true);
+    bool DrawBoxBuffer(uint8_t x1, uint8_t y1, uint8_t x2, uint8_t y2, bool on = true, bool fill = true);
+    bool DrawBox(uint8_t x1, uint8_t y1, uint8_t x2, uint8_t y2, bool on = true, bool fill = true)
+    {
+        return DrawBoxBuffer(x1, y1, x2, y2, on, fill) && SendDisplay();
+    }
 
     /**
      * Sends a bitmap directly to the LOL shield for display.
@@ -98,13 +108,18 @@ class Display
      *
      * @return  true if successfully cleared, false otherwise (communication error)
      */
-    bool DrawBitmap(const uint16_t* bitmap);
+    bool DrawBitmapBuffer(const uint16_t* bitmap);
+    bool DrawBitmap(const uint16_t* bitmap) { return DrawBitmapBuffer(bitmap) && SendDisplay(); }
+
+    /**
+     * Send the display buffer to the Arduino side for display.
+     */
+    bool SendDisplay();
 
   private:
     SMsg smsg;
     uint16_t display[9];
 
-    bool SendDisplay();
     void _DrawPoint(uint8_t x, uint8_t y, bool on);
 };
 

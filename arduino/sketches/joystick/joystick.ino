@@ -21,36 +21,21 @@
 
 enum {
   JS_EVENT,
-  SET_X_CAL,
-  SET_Y_CAL,
   SET_X_RANGE,
   SET_Y_RANGE,
-  GET_X_CAL,
-  GET_Y_CAL,
-  GET_X_RANGE,
-  GET_Y_RANGE,
   RESET,
   INVALID
 };
 
 
-const int buttonMap[]= { 3, 4, 5, 6, 7, 8, 9 };
-Joystick js(A1, A0, buttonMap, sizeof(buttonMap) / sizeof(buttonMap[0]), 0);
+const uint8_t buttonMap[]= { 7, 6, 5, 4, 3, 8, 9 };
+Joystick js(A1, A0, 0, 996, 0, 996,
+            buttonMap, sizeof(buttonMap) / sizeof(buttonMap[0]), 0);
 
 SMsg smsg;
 
-int respond(byte* buf, int i1, int i2)
-{
-  buf[1] = i1 >> 8;
-  buf[2] = i1 & 0xff;
-  buf[3] = i2 >> 8;
-  buf[4] = i2 & 0xff;
-  return smsg.write(buf, CMD_BUF_SIZE);
-}  
-
-
 void setup() {
-  //Serial.begin(9600);
+  Serial.begin(115200);
   smsg.begin();
   js.begin();
 }
@@ -58,19 +43,27 @@ void setup() {
 
 void loop() {
   if (smsg.available()) {
-    processCommand();
+    byte buf[CMD_BUF_SIZE];
+    buf[0] = INVALID;
+    int ret = smsg.read(buf, sizeof(buf));
+    if (ret < 1) {
+      if (smsg.linuxRebooting()) {
+        js.end();
+        Serial.println("Linino is rebooting - everything is paused for up to 2 minutes...");
+        smsg.waitLinuxBoot();
+        Serial.println("reboot done");
+        js.reset();
+        js.begin();
+      }
+      return;
+    }
+    processCommand(buf, ret);
   }
   if (js.stateChanged()) {
-    //Serial.print("JS event ");
     byte buf[7];
     int x = js.readXPos();
     int y = js.readYPos();
     unsigned short b = js.readButtons();
-    //Serial.print(x, DEC);
-    //Serial.print(" ");
-    //Serial.print(y, DEC);
-    //Serial.print(" ");
-    //Serial.println(b, HEX);
     buf[0] = JS_EVENT;
     buf[1] = b >> 8;
     buf[2] = b & 0xff;
@@ -82,72 +75,27 @@ void loop() {
   }
 }
 
-void processCommand(void)
+void processCommand(byte* buf, uint8_t bufSize)
 {
-  byte buf[CMD_BUF_SIZE];
-  buf[0] = INVALID;
-  int ret = smsg.read(buf, sizeof(buf));
-  int i1 = ((int)buf[1] << 8) | buf[2];
-  int i2 = ((int)buf[3] << 8) | buf[4];
+  int16_t i1 = ((int16_t)buf[1] << 8) | buf[2];
+  int16_t i2 = ((int16_t)buf[3] << 8) | buf[4];
   switch (buf[0]) {
-    case SET_X_CAL:
-      if (ret == 5) {
-        Serial.println("Set X cal");
-        js.setXCal(i1, i2);
-      }
-      break;
-
-    case SET_Y_CAL:
-      if (ret == 5) {
-        Serial.println("Set Y cal");
-        js.setYCal(i1, i2);
-      }
-      break;
-
     case SET_X_RANGE:
-      if (ret == 5) {
+      if (bufSize == 5) {
         Serial.println("Set X range");
         js.setXRange(i1, i2);
       }
       break;
 
     case SET_Y_RANGE:
-      if (ret == 5) {
+      if (bufSize == 5) {
         Serial.println("Set Y range");
         js.setYRange(i1, i2);
       }
       break;
 
-    case GET_X_CAL:
-      if (ret == 1) {
-        Serial.println("Get X cal");
-        respond(buf, js.getXCalLeft(), js.getXCalRight());
-      }
-      break;
-
-    case GET_Y_CAL:
-      if (ret == 1) {
-        Serial.println("Get Y cal");
-        respond(buf, js.getYCalUp(), js.getYCalDown());
-      }
-      break;
-
-    case GET_X_RANGE:
-      if (ret == 1) {
-        Serial.println("Get X range");
-        respond(buf, js.getXOutLeft(), js.getXOutRight());
-      }
-      break;
-
-    case GET_Y_RANGE:
-      if (ret == 1) {
-        Serial.println("Get Y range");
-        respond(buf, js.getYOutUp(), js.getYOutDown());
-      }
-      break;
-
     case RESET:
-      if (ret == 1) {
+      if (bufSize == 1) {
         Serial.println("Reset");
         js.reset();
       }

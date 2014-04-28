@@ -54,31 +54,6 @@ class Joystick
     bool ReadJoystick(uint16_t& buttons, int16_t& x, int16_t& y);
 
     /**
-     * Set the calibration of the joystick deflection range.  This improves
-     * positional conversion accuracy.
-     *
-     * @param left      Analog reading when joystick is fully left.
-     * @param right     Analog reading when joystick is fully right.
-     * @param up        Analog reading when joystick is fully up.
-     * @param down      Analog reading when joystick is fully down.
-     *
-     * @return  true if successfully set, false otherwise (probably communication error)
-     */
-    bool SetCal(int16_t left, int16_t right, int16_t up, int16_t down);
-
-    /**
-     * Gets the current calibration of the joystick deflection range.
-     *
-     * @param[out] left     Analog reading when joystick is fully left.
-     * @param[out] right    Analog reading when joystick is fully right.
-     * @param[out] up       Analog reading when joystick is fully up.
-     * @param[out] down     Analog reading when joystick is fully down.
-     *
-     * @return  true if successfully got, false otherwise (probably communication error)
-     */
-    bool GetCal(int16_t& left, int16_t& right, int16_t& up, int16_t& down);
-
-    /**
      * Set the output range of the joystick position.  This just sets a
      * conversion of the joystick output to convenient values.  In other
      * words, you can set the output range to be from -10 to +10 even though
@@ -91,24 +66,12 @@ class Joystick
      *
      * @return  true if successfully set, false otherwise (probably communication error)
      */
-    bool SetOut(int16_t left, int16_t right, int16_t up, int16_t down);
-
-    /**
-     * Get the current output range of the joystick position.
-     *
-     * @param[out] left     Output value when joystick is fully left.
-     * @param[out] right    Output value when joystick is fully right.
-     * @param[out] up       Output value when joystick is fully up.
-     * @param[out] down     Output value when joystick is fully down.
-     *
-     * @return  true if successfully got, false otherwise (probably communication error)
-     */
-    bool GetOut(int16_t& left, int16_t& right, int16_t& up, int16_t& down);
+    bool SetOutputRange(int16_t left, int16_t right, int16_t up, int16_t down);
 
     /**
      * This defaults the calibration and output ranges to 0 to 1023.
      */
-    bool ResetCal();
+    bool ResetRange();
 
   private:
     SMsg smsg;

@@ -29,6 +29,7 @@
 #include <aj_tutorial/display.h>
 #include <aj_tutorial/smsg.h>
 
+#define dbg 0
 
 using namespace std;
 
@@ -45,20 +46,20 @@ Display::Display()
 
 
 
-bool Display::ClearDisplay()
+bool Display::ClearDisplayBuffer()
 {
     memset(display, 0, sizeof(display));
-    return SendDisplay();
+    return true;
 }
 
-bool Display::DrawPoint(uint8_t x, uint8_t y, bool on)
+bool Display::DrawPointBuffer(uint8_t x, uint8_t y, bool on)
 {
     if (!Valid(x, y)) {
         return false;
     }
 
     _DrawPoint(x, y, on);
-    return SendDisplay();
+    return true;
 }
 
 const static int32_t SCALE = 1024 * 1024;
@@ -77,7 +78,7 @@ static uint8_t ComputeCoordinate(int32_t slope, uint8_t c, uint8_t i1, uint8_t i
 }
 
 
-bool Display::DrawLine(uint8_t x1, uint8_t y1, uint8_t x2, uint8_t y2, bool on)
+bool Display::DrawLineBuffer(uint8_t x1, uint8_t y1, uint8_t x2, uint8_t y2, bool on)
 {
     if (!Valid(x1, y1) || !Valid(x2, y2)) {
         return false;
@@ -101,10 +102,10 @@ bool Display::DrawLine(uint8_t x1, uint8_t y1, uint8_t x2, uint8_t y2, bool on)
             _DrawPoint(x, y, on);
         }
     }
-    return SendDisplay();
+    return true;
 }
 
-bool Display::DrawBox(uint8_t x1, uint8_t y1, uint8_t x2, uint8_t y2, bool on, bool fill)
+bool Display::DrawBoxBuffer(uint8_t x1, uint8_t y1, uint8_t x2, uint8_t y2, bool on, bool fill)
 {
     if (!Valid(x1, y1) || !Valid(x2, y2)) {
         return false;
@@ -141,28 +142,34 @@ bool Display::DrawBox(uint8_t x1, uint8_t y1, uint8_t x2, uint8_t y2, bool on, b
         }
     }
 
-    return SendDisplay();
+    return true;
 }
 
-bool Display::DrawBitmap(const uint16_t* bitmap)
+bool Display::DrawBitmapBuffer(const uint16_t* bitmap)
 {
     memcpy(display, bitmap, sizeof(display));
-    return SendDisplay();
+    return true;
 }
 
 bool Display::SendDisplay()
 {
     uint8_t buf[sizeof(display)];
+    if (dbg) printf("        +--------------+\n");
     for (size_t i = 0; i < 9; ++i) {
         // MSB
         buf[2 * i] = display[i] >> 8;
         // LSB
         buf[2 * i + 1] = display[i] & 0xff;
-        printf("%u: %04x  %02x %02x\n", (unsigned int)i, display[i], buf[2 * i] , buf[2 * i + 1]);
+        if (dbg) printf("%u: %04x |", (unsigned int)i, display[i]);
+        if (dbg) for (int j = 0; j < 14; ++j) {
+            printf("%c", (display[i] & (1 << (13 - j))) ? '*' : ' ');
+        }
+        if (dbg) printf("| %02x %02x\n", buf[2 * i] , buf[2 * i + 1]);
     }
+    if (dbg) printf("        +--------------+\n");
 
     int r = smsg.Write(buf, sizeof(buf));
-    printf("msg write => %d\n", r);
+    //printf("msg write => %d\n", r);
     return (r == sizeof(buf));
 }
 

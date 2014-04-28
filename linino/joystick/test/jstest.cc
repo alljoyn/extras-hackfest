@@ -27,14 +27,15 @@
 
 #include <aj_tutorial/joystick.h>
 
-//#define RED_BUTTON    (1 << 3)
-//#define GREEN_BUTTON  (1 << 4)
-#define RED_BUTTON    (0)
-#define GREEN_BUTTON  (1 << 3)
-#define BLUE_BUTTON   (1 << 5)
-#define YELLOW_BUTTON (1 << 6)
-#define JS_BUTTON     (1 << 2)
+#define BUTTON_A (1 << 0)
+#define BUTTON_B (1 << 1)
+#define BUTTON_C (1 << 2)
+#define BUTTON_D (1 << 3)
+#define BUTTON_E (1 << 4)
+#define BUTTON_F (1 << 5)
+#define BUTTON_G (1 << 6)
 
+#define JS_BUTTON BUTTON_C
 
 int main(void)
 {
@@ -43,51 +44,41 @@ int main(void)
     bool done = false;
     uint16_t oldbuttons = 0;
 
+    printf("Press and release Joystick button to exit.\n");
+
     while (!done) {
         uint16_t buttons;
         int16_t x;
         int16_t y;
         if (js.ReadJoystick(buttons, x, y)) {
             printf("x: %d   y: %d   buttons:", x, y);
-            if (buttons & JS_BUTTON) {
-                printf(" Joystick");
-            }
-            if (buttons & RED_BUTTON) {
-                printf(" Red");
-            }
-            if (buttons & GREEN_BUTTON) {
-                printf(" Green");
-            }
-            if (buttons & BLUE_BUTTON) {
-                printf(" Blue");
-            }
-            if (buttons & YELLOW_BUTTON) {
-                printf(" Yellow");
-            }
+            if (buttons & BUTTON_A) printf(" A");
+            if (buttons & BUTTON_B) printf(" B");
+            if (buttons & BUTTON_C) printf(" C");
+            if (buttons & BUTTON_D) printf(" D");
+            if (buttons & BUTTON_E) printf(" E");
+            if (buttons & BUTTON_F) printf(" F");
+            if (buttons & BUTTON_G) printf(" G");
+            if (buttons & JS_BUTTON) printf(" Joystick");
             printf("\n");
 
-            if ((buttons & JS_BUTTON) && !(oldbuttons & JS_BUTTON)) {
+            if (!(buttons & JS_BUTTON) && (oldbuttons & JS_BUTTON)) {
                 done = true;
             }
-            if ((buttons & RED_BUTTON) && !(oldbuttons & RED_BUTTON)) {
-                js.SetCal(15, 995, 995, 15);
+            if ((buttons & BUTTON_A) && !(oldbuttons & BUTTON_A)) {
+                js.SetOutputRange(-16, 16, -16, 16);
             }
-            if ((buttons & GREEN_BUTTON) && !(oldbuttons & GREEN_BUTTON)) {
-                js.SetOut(-16, 16, -32, 32);
+            if ((buttons & BUTTON_B) && !(oldbuttons & BUTTON_B)) {
+                js.ResetRange();
             }
-            if ((buttons & BLUE_BUTTON) && !(oldbuttons & BLUE_BUTTON)) {
-                js.ResetCal();
-                    
+            if ((buttons & BUTTON_G) && !(oldbuttons & BUTTON_G)) {
+                js.SetOutputRange(-1, 1, -1, 1);
             }
-            if ((buttons & YELLOW_BUTTON) && !(oldbuttons & YELLOW_BUTTON)) {
-                int16_t left;
-                int16_t right;
-                int16_t up;
-                int16_t down;
-                js.GetCal(left, right, up, down);
-                printf("Calibration:  left = %d   right = %d   up = %d   down = %d\n", left, right, up, down);
-                js.GetOut(left, right, up, down);
-                printf("Output range: left = %d   right = %d   up = %d   down = %d\n", left, right, up, down);
+            if ((buttons & BUTTON_F) && !(oldbuttons & BUTTON_F)) {
+                js.SetOutputRange(10, 0, 0, 10);
+            }
+            if ((buttons & BUTTON_D) && !(oldbuttons & BUTTON_D)) {
+                js.SetOutputRange(-10, 0, 0, -10);
             }
             oldbuttons = buttons;
         } else {

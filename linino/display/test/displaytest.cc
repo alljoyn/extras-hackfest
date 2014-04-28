@@ -51,9 +51,8 @@ int main(void)
     display.DrawBitmap(alljoynBitmap);
 
     msleep(2000);
+    display.ClearDisplayBuffer();
     printf("Draw points on\n");
-    display.ClearDisplay();
-
     for (y = 0; y < 9; ++y) {
         for (x = 0; x < 14; x += (y + 1)) {
             display.DrawPoint(x, y);
@@ -62,18 +61,17 @@ int main(void)
     }
 
     msleep(2000);
+    display.ClearDisplayBuffer();
     printf("Draw lines\n");
-    display.ClearDisplay();
-
     for (x = 0; x < 9; x += 2) {
         display.DrawLine(x, 0, 8 - x, 8);
         msleep(200);
-        display.DrawLine(x, 0, 8 - x, 8, false);
+        display.DrawLineBuffer(x, 0, 8 - x, 8, false);
     }
     for (y = 0; y < 9; y += 2) {
         display.DrawLine(8, y, 0, 8 - y);
         msleep(200);
-        display.DrawLine(8, y, 0, 8 - y, false);
+        display.DrawLineBuffer(8, y, 0, 8 - y, false);
     }
     for (x = 0; x < 9; x += 2) {
         display.DrawLine(8 - x, 8, x, 0);
@@ -85,23 +83,19 @@ int main(void)
     }
 
     msleep(2000);
+    display.ClearDisplayBuffer();
     printf("Draw boxes\n");
-    display.ClearDisplay();
-
     display.DrawBox(0, 0, 13, 8, true, false);
-    msleep(200);
+    msleep(500);
     display.DrawBox(2, 2, 11, 6, true, true);
-    msleep(200);
+    msleep(500);
     display.DrawBox(0, 0, 13, 8, true, true);
     display.DrawBox(0, 0, 13, 8, false, false);
-    msleep(200);
+    msleep(500);
     display.DrawBox(2, 2, 11, 6, false, true);
-    msleep(200);
-
 
     msleep(2000);
-    display.DrawBox(0, 0, 13, 8);
-
+    display.DrawBoxBuffer(0, 0, 13, 8);
     printf("Draw points off\n");
     for (y = 0; y < 9; ++y) {
         for (x = 0; x < 14; x += (y + 1)) {
@@ -111,9 +105,30 @@ int main(void)
     }
 
     msleep(2000);
+    display.DrawBoxBuffer(0, 0, 13, 8);
+    printf("Draw lines off\n");
+    for (x = 0; x < 9; x += 2) {
+        display.DrawLine(x, 0, 8 - x, 8, false);
+        msleep(200);
+        display.DrawLineBuffer(x, 0, 8 - x, 8, true);
+    }
+    for (y = 0; y < 9; y += 2) {
+        display.DrawLine(8, y, 0, 8 - y, false);
+        msleep(200);
+        display.DrawLineBuffer(8, y, 0, 8 - y, true);
+    }
+    for (x = 0; x < 9; x += 2) {
+        display.DrawLine(8 - x, 8, x, 0, false);
+        msleep(200);
+    }
+    for (y = 0; y < 9; y += 2) {
+        display.DrawLine(0, 8 - y, 8, y, false);
+        msleep(200);
+    }
+
+    msleep(2000);
     printf("Done\n");
     display.ClearDisplay();
-
 
     return 0;
 }

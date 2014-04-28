@@ -19,10 +19,14 @@
 
 SMsg smsg;
 
+long refreshtime = 0;
+const long scan = 500;
+
 void setup() {
-  Serial.begin(9600);
+  Serial.begin(115200);
   smsg.begin();
   LOL.begin();
+  refreshtime = micros() + scan;
 }
 
 
@@ -37,7 +41,17 @@ void loop() {
         bitmap[i] = ((uint16_t)buf[2 * i] << 8) | buf[2 * i + 1];
       }
       LOL.render(bitmap);
+      Serial.println("render bitmap");
     } else {
+      if (smsg.linuxRebooting()) {
+        LOL.end();
+        Serial.println("Linino is rebooting - everything is paused for up to 2 minutes...");
+        smsg.waitLinuxBoot();
+        Serial.println("reboot done");
+        LOL.begin();
+      } else {
+        Serial.println("bad msg");
+      }
     }
   }
 }
