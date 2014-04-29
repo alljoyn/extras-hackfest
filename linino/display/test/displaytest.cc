@@ -56,7 +56,7 @@ int main(void)
     for (y = 0; y < 9; ++y) {
         for (x = 0; x < 14; x += (y + 1)) {
             display.DrawPoint(x, y);
-            msleep(200);
+            msleep(100);
         }
     }
 
@@ -68,7 +68,7 @@ int main(void)
         msleep(200);
         display.DrawLineBuffer(x, 0, 8 - x, 8, false);
     }
-    for (y = 0; y < 9; y += 2) {
+    for (y = 2; y < 9; y += 2) {
         display.DrawLine(8, y, 0, 8 - y);
         msleep(200);
         display.DrawLineBuffer(8, y, 0, 8 - y, false);
@@ -77,7 +77,7 @@ int main(void)
         display.DrawLine(8 - x, 8, x, 0);
         msleep(200);
     }
-    for (y = 0; y < 9; y += 2) {
+    for (y = 2; y < 9; y += 2) {
         display.DrawLine(0, 8 - y, 8, y);
         msleep(200);
     }
@@ -100,7 +100,7 @@ int main(void)
     for (y = 0; y < 9; ++y) {
         for (x = 0; x < 14; x += (y + 1)) {
             display.DrawPoint(x, y, false);
-            msleep(200);
+            msleep(100);
         }
     }
 
@@ -112,7 +112,7 @@ int main(void)
         msleep(200);
         display.DrawLineBuffer(x, 0, 8 - x, 8, true);
     }
-    for (y = 0; y < 9; y += 2) {
+    for (y = 2; y < 9; y += 2) {
         display.DrawLine(8, y, 0, 8 - y, false);
         msleep(200);
         display.DrawLineBuffer(8, y, 0, 8 - y, true);
@@ -121,10 +121,19 @@ int main(void)
         display.DrawLine(8 - x, 8, x, 0, false);
         msleep(200);
     }
-    for (y = 0; y < 9; y += 2) {
+    for (y = 2; y < 9; y += 2) {
         display.DrawLine(0, 8 - y, 8, y, false);
         msleep(200);
     }
+
+    msleep(2000);
+    display.ClearDisplayBuffer();
+    printf("Draw scores\n");
+    for (int score = 0; score < 39; ++score) {
+        display.DrawScoreBoard(score / 2 + (score % 2), score / 2, score % 2, !(score % 2));
+        msleep(500);
+    }
+
 
     msleep(2000);
     printf("Done\n");

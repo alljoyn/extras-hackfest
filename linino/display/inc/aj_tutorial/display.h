@@ -61,7 +61,7 @@ class Display
      * @param y     y coordinate to turn on/off
      * @param on    whether to turn the LED on or off (default = on)
      *
-     * @return  true if successfully cleared, false otherwise (bad coordinate or communication error)
+     * @return  true if successfully drawn, false otherwise (bad coordinate or communication error)
      */
     bool DrawPointBuffer(uint8_t x, uint8_t y, bool on = true);
     bool DrawPoint(uint8_t x, uint8_t y, bool on = true) { return DrawPointBuffer(x, y, on) && SendDisplay(); }
@@ -75,7 +75,7 @@ class Display
      * @param y2    y coordinate of the end of the line to turn on/off
      * @param on    whether to turn the LED on or off (default = on)
      *
-     * @return  true if successfully cleared, false otherwise (bad coordinate or communication error)
+     * @return  true if successfully drawn, false otherwise (bad coordinate or communication error)
      */
     bool DrawLineBuffer(uint8_t x1, uint8_t y1, uint8_t x2, uint8_t y2, bool on = true);
     bool DrawLine(uint8_t x1, uint8_t y1, uint8_t x2, uint8_t y2, bool on = true)
@@ -93,7 +93,7 @@ class Display
      * @param on    whether to turn the LED on or off (default = on)
      * @param fill  whether to draw just the outline of the box or the full box (default = full box)
      *
-     * @return  true if successfully cleared, false otherwise (bad coordinate or communication error)
+     * @return  true if successfully drawn, false otherwise (bad coordinate or communication error)
      */
     bool DrawBoxBuffer(uint8_t x1, uint8_t y1, uint8_t x2, uint8_t y2, bool on = true, bool fill = true);
     bool DrawBox(uint8_t x1, uint8_t y1, uint8_t x2, uint8_t y2, bool on = true, bool fill = true)
@@ -109,13 +109,43 @@ class Display
      *                  and bit 0 is the right most edge and bit 13 is the left
      *                  most edge.
      *
-     * @return  true if successfully cleared, false otherwise (communication error)
+     * @return  true if successfully drawn, false otherwise (communication error)
      */
     bool DrawBitmapBuffer(const uint16_t* bitmap);
     bool DrawBitmap(const uint16_t* bitmap) { return DrawBitmapBuffer(bitmap) && SendDisplay(); }
 
     /**
+     * Draw a score board.  Scores can range in value from 0 to 19.  Either
+     * the right or left side of the score board can be highlighed by
+     * inverting which LEDs are on/off.
+     *
+     * @param left              The left hand score
+     * @param right             The right hand score
+     * @param highlightLeft     Highlight the left hand score
+     * @param highlightRight    Highlight the right hand score
+     *
+     * @return  true if successfully drawn, false otherwise (communication error)
+     */
+    bool DrawScoreBoardBuffer(uint8_t left, uint8_t right, bool highlightLeft = true, bool highlightRight = true);
+    bool DrawScoreBoard(uint8_t left, uint8_t right, bool highlightLeft = true, bool highlightRight = true)
+    {
+        return DrawScoreBoardBuffer(left, right, highlightLeft, highlightRight) && SendDisplay();
+    }
+
+    /**
+     * Save a copy of the display current display bitmap image into a buffer.
+     *
+     * @param bitmapBuffer  Pointer to an array of at lease 9 uint16_t's to store the display bitmap
+     */
+    void SaveDisplayBitmap(uint16_t* bitmapBuffer) const
+    {
+        memcpy(bitmapBuffer, display, sizeof(display));
+    }
+
+    /**
      * Send the display buffer to the Arduino side for display.
+     *
+     * @return  true if successfully sent, false otherwise (communication error)
      */
     bool SendDisplay();
 
