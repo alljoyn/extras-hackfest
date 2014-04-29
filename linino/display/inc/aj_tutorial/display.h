@@ -133,6 +133,16 @@ class Display
     }
 
     /**
+     * Draw a single character on the display.
+     *
+     * @param c     The character to display (if there is no character for it a '.' will be displayed.
+     *
+     * @return  true if successfully drawn, false otherwise (communication error)
+     */
+    bool DrawCharacterBuffer(char c);
+    bool DrawCharacter(char c) { return DrawCharacterBuffer(c) && SendDisplay(); }
+
+    /**
      * Save a copy of the display current display bitmap image into a buffer.
      *
      * @param bitmapBuffer  Pointer to an array of at lease 9 uint16_t's to store the display bitmap

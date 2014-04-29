@@ -39,6 +39,11 @@
 
 #define BAUDRATE B230400
 
+
+#if !defined(HOST_BUILD)
+#define TTY_DEV "/dev/ttyATH0"
+#endif
+
 class CheckSum {
   public:
     CheckSum() : sum(0), pos(0) { }
@@ -55,7 +60,7 @@ class CheckSum {
 
 SMsg::SMsg(void): fd(-1)
 {
-#if !defined(TTY_DEV)
+#if !defined(HOST_BUILD)
     fd = open(TTY_DEV, O_RDWR | O_NONBLOCK | O_NOCTTY);
     if (fd < 0) {
         perror("opening " TTY_DEV);

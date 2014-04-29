@@ -40,12 +40,8 @@ env.Append(CXXFLAGS=['-Os',
 env.Append(LINKFLAGS='-s')
 env.Append(CPPPATH=env.Dir('./inc'));
 
-if os.environ.has_key('STAGING_DIR'):
-    env.Append(CPPDEFINES={'TTY_DEV': '/dev/ttyATH0'})
-elif os.path.exists('/dev/ttyUSB0'):
-    env.Append(CPPDEFINES={'TTY_DEV': '/dev/ttyUSB0'})
-elif os.path.exists('/dev/ttyS0'):
-    env.Append(CPPDEFINES={'TTY_DEV': '/dev/ttyS0'})
+if not os.environ.has_key('STAGING_DIR'):
+    env.Append(CPPDEFINES='HOST_BUILD')
 
 srcs = env.Glob('src/*.cc')
 

@@ -134,6 +134,16 @@ int main(void)
         msleep(500);
     }
 
+    msleep(2000);
+    display.ClearDisplayBuffer();
+    printf("Draw characters\n");
+    static const char characters[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890abcdefghijklmnopqrstuvwxyz.! ";
+    for (size_t i = 0; i < sizeof(characters) - 1; ++i) {
+        printf("%c\n", characters[i]);
+        display.DrawCharacter(characters[i]);
+        msleep(200);
+    }
+
 
     msleep(2000);
     printf("Done\n");
