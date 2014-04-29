@@ -202,8 +202,6 @@ void NotificationReceiverImpl::Receive(Notification const& notification) {
 
 
         std::cout << "******************** End New Message Received ********************" << std::endl << std::endl;
-
-        Notification nonConstNotification(notification);
     }
     std::cout << "End handling notification!!!" << std::endl;
 }
@@ -298,15 +296,11 @@ int main()
         busAttachment = NULL;
     }
 
+    // Connect to the AJ Router
     status = busAttachment->Connect();
     if (status != ER_OK) {
         delete busAttachment;
         busAttachment = NULL;
-    }
-    if (busAttachment == NULL) {
-        std::cout << "Could not initialize BusAttachment." << std::endl;
-        cleanup();
-        return EXIT_FAILURE;
     }
 
     // Initialize Service object
