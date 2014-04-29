@@ -17,3 +17,19 @@ export LDFLAGS="-L$ALLJOYN_DIST/cpp/lib \
 
 export LD_LIBRARY_PATH="$ALLJOYN_DIST/cpp/lib:$ALLJOYN_DIST/about/lib:$ALLJOYN_DIST/services_common/lib:$ALLJOYN_DIST/notification/lib:$ALLJOYN_DIST/controlpanel/lib"
 
+for f in $ALLJOYN_ROOT/hackfest/aj_samples/*; do export PATH=$PATH:$f/build; done
+
+build() {
+    pushd $1
+    scons WS=no
+    popd
+}
+
+m() {
+    if [ "$1" == "hackfest" ]; then
+        for f in $ALLJOYN_ROOT/hackfest/aj_samples/*; do build $f; done
+    else
+        build $ALLJOYN_ROOT/hackfest/aj_samples/$1
+    fi
+}
+
