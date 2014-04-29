@@ -1,0 +1,17 @@
+import os
+Import('env')
+
+# Sample programs
+progs = [
+    env.Program('helloworld', 'helloworld.cc'),
+    env.Program('hello_joystick_notif_send', 'solutions/hello_joystick_notif_send.cc'), 
+    env.Program('hello_notif_rx_to_display', 'solutions/hello_notif_rx_to_display.cc'),
+    env.Program('hello_print_string', 'solutions/hello_print_string.cc'),
+    env.Program('hello_service_print_string', 'solutions/hello_service_add_printstring_method.cc'),
+    env.Program('hello_client_print_string', 'solutions/hello_client_call_printstring_method.cc'),
+    env.Program('hello_client_multi_print_string', 'solutions/hello_client_multi_call_printstring_method.cc'),
+    env.Program('hello_service_multi_print_string', 'solutions/hello_service_multi_add_printstring_method.cc')
+]
+
+returnValue = env.Install('$DISTDIR/bin', progs)
+Return ('returnValue')
