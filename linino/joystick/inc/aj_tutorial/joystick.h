@@ -24,7 +24,9 @@
 
 #include <stdint.h>
 
+#if !defined(HOST_BUILD)
 #include <aj_tutorial/smsg.h>
+#endif
 
 class Joystick
 {
@@ -32,6 +34,7 @@ class Joystick
     Joystick() { }
     ~Joystick() { }
 
+#if !defined(HOST_BUILD)
     /**
      * Get access to the underlying file descriptor used to communicate with
      * the joystick driver sketch running on the Arduino.  Only use this file
@@ -41,6 +44,7 @@ class Joystick
      * @return  file descriptor
      */
     int GetFD() const { return smsg.GetFD(); }
+#endif
 
     /**
      * Read event data from the joystick.
@@ -74,7 +78,9 @@ class Joystick
     bool ResetRange();
 
   private:
+#if !defined(HOST_BUILD)
     SMsg smsg;
+#endif
 
     bool SendSetCmd(uint8_t cmd, int16_t i1, int16_t i2);
     bool SendGetCmd(uint8_t cmd, int16_t& i1, int16_t& i2);

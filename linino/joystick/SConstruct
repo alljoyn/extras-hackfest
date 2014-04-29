@@ -39,7 +39,11 @@ env.Append(CXXFLAGS=['-Os',
                      '-fno-strict-aliasing'])
 env.Append(LINKFLAGS='-s')
 env.Append(CPPPATH=env.Dir('./inc'));
-env.Append(LIBS = ['smsg'])
+if os.environ.has_key('STAGING_DIR'):
+    env.Append(LIBS = ['smsg'])
+
+if not os.environ.has_key('STAGING_DIR'):
+    env.Append(CPPDEFINES='HOST_BUILD')
 
 srcs = env.Glob('src/*.cc')
 

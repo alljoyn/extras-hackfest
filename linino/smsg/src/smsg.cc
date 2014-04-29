@@ -35,8 +35,6 @@
 
 #include <aj_tutorial/smsg.h>
 
-#define TTY_DEV "/dev/ttyATH0"
-
 #define RD_TO 50
 
 #define BAUDRATE B230400
@@ -55,8 +53,10 @@ class CheckSum {
 };
 
 
-SMsg::SMsg(void): fd(open(TTY_DEV, O_RDWR | O_NONBLOCK | O_NOCTTY))
+SMsg::SMsg(void): fd(-1)
 {
+#if !defined(TTY_DEV)
+    fd = open(TTY_DEV, O_RDWR | O_NONBLOCK | O_NOCTTY);
     if (fd < 0) {
         perror("opening " TTY_DEV);
     } else {
@@ -71,6 +71,7 @@ SMsg::SMsg(void): fd(open(TTY_DEV, O_RDWR | O_NONBLOCK | O_NOCTTY))
         cfsetspeed(&tio, BAUDRATE);
         tcsetattr(fd, TCSANOW, &tio);
     }
+#endif
 
     while (WaitForMsg(10 * RD_TO)) {
         FlushRead();
@@ -79,21 +80,25 @@ SMsg::SMsg(void): fd(open(TTY_DEV, O_RDWR | O_NONBLOCK | O_NOCTTY))
 
 SMsg::~SMsg(void)
 {
-    close(fd);
+    if (fd > 0) {
+        close(fd);
+    }
 }
 
 
 int SMsg::Read(uint8_t* buf, uint8_t len)
 {
-    int ret;
+    int ret = -1;
 
-    fd_set rfds;
-    FD_ZERO(&rfds);
-    FD_SET(fd, &rfds);
-    ret = select(fd + 1, &rfds, NULL, NULL, NULL);
+    if (fd > 0) {
+        fd_set rfds;
+        FD_ZERO(&rfds);
+        FD_SET(fd, &rfds);
+        ret = select(fd + 1, &rfds, NULL, NULL, NULL);
 
-    if (ret > 0) {
-        ret = ReadMsg(buf, len);
+        if (ret > 0) {
+            ret = ReadMsg(buf, len);
+        }
     }
     return ret;
 }
@@ -116,7 +121,6 @@ int SMsg::ReadMsg(uint8_t* buf, uint8_t len)
 
 
     if (!ReadByte(&plen)) {
-        // no flushing
         return 0;
     }
     if ((plen > MAX_MSG_LEN) || (plen > len)) {
@@ -145,7 +149,6 @@ int SMsg::ReadMsg(uint8_t* buf, uint8_t len)
         return -1;
     }
 
-exit:
     FlushRead();
 
     return plen;
@@ -155,7 +158,6 @@ exit:
 int SMsg::WriteMsg(const uint8_t* buf, uint8_t len)
 {
     CheckSum sum;
-    ssize_t ret;
     uint8_t sumbuf;
     uint8_t i;
 
@@ -190,10 +192,12 @@ int SMsg::WriteMsg(const uint8_t* buf, uint8_t len)
 bool SMsg::ReadByte(uint8_t* buf)
 {
     if (WaitForMsg(RD_TO)) {
-        int ret = read(fd, buf, 1);
-        if (ret > 0) {
-            //printf(" r%02x", *buf); fflush(stdout);
-            return true;
+        if (fd > 0) {
+            ssize_t ret = read(fd, buf, 1);
+            if (ret > 0) {
+                //printf(" r%02x", *buf); fflush(stdout);
+                return true;
+            }
         }
     }
     return false;
@@ -201,9 +205,12 @@ bool SMsg::ReadByte(uint8_t* buf)
 
 bool SMsg::WriteByte(const uint8_t buf)
 {
-    //printf(" w%02x", buf); fflush(stdout);
-    int ret = write(fd, &buf, 1);
-    return (ret > 0);
+    if (fd > 0) {
+        //printf(" w%02x", buf); fflush(stdout);
+        ssize_t ret = write(fd, &buf, 1);
+        return (ret > 0);
+    }
+    return false;
 }
 
 
@@ -212,17 +219,23 @@ void SMsg::FlushRead()
     uint8_t buf;
 
     while (WaitForMsg(RD_TO)) {
-        read(fd, &buf, 1);
-        //printf(" f%02x", buf); fflush(stdout);
+        if (fd > 0) {
+            ssize_t ret = read(fd, &buf, 1);
+            ret++; // suppress compiler warning.
+            //printf(" f%02x", buf); fflush(stdout);
+        }
     }
 }
 
 
 bool SMsg::WaitForMsg(uint32_t timeout)
 {
-    fd_set rfds;
-    struct timeval to = { 0, timeout * 1000 };
-    FD_ZERO(&rfds);
-    FD_SET(fd, &rfds);
-    return (select(fd + 1, &rfds, NULL, NULL, &to) > 0);
+    if (fd > 0) {
+        fd_set rfds;
+        struct timeval to = { 0, timeout * 1000 };
+        FD_ZERO(&rfds);
+        FD_SET(fd, &rfds);
+        return (select(fd + 1, &rfds, NULL, NULL, &to) > 0);
+    }
+    return false;
 }

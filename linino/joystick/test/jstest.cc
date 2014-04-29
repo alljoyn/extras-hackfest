@@ -40,7 +40,6 @@
 int main(void)
 {
     Joystick js;
-    int ret;
     bool done = false;
     uint16_t oldbuttons = 0;
 

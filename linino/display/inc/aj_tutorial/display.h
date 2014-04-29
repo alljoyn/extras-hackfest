@@ -24,8 +24,9 @@
 
 #include <stdint.h>
 
+#if !defined(HOST_BUILD)
 #include <aj_tutorial/smsg.h>
-
+#endif
 
 class Display
 {
@@ -33,6 +34,7 @@ class Display
     Display();
     ~Display() { }
 
+#if !defined(HOST_BUILD)
     /**
      * Get access to the underlying file descriptor used to communicate with
      * the LOL driver sketch running on the Arduino.  Only use this file
@@ -41,7 +43,8 @@ class Display
      *
      * @return  file descriptor
      */
-    //int GetFD() const { return smsg.GetFD(); }
+    int GetFD() const { return smsg.GetFD(); }
+#endif
 
     /**
      * Clear the display (all LEDs off).
@@ -117,7 +120,9 @@ class Display
     bool SendDisplay();
 
   private:
+#if !defined(HOST_BUILD)
     SMsg smsg;
+#endif
     uint16_t display[9];
 
     void _DrawPoint(uint8_t x, uint8_t y, bool on);

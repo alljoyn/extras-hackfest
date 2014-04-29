@@ -27,9 +27,17 @@
 #include <string.h>
 
 #include <aj_tutorial/display.h>
-#include <aj_tutorial/smsg.h>
 
+#if !defined(HOST_BUILD)
+#include <aj_tutorial/smsg.h>
+#endif
+
+
+#if defined(HOST_BUILD)
+#define dbg 1
+#else
 #define dbg 0
+#endif
 
 using namespace std;
 
@@ -168,9 +176,12 @@ bool Display::SendDisplay()
     }
     if (dbg) printf("        +--------------+\n");
 
+#if defined(HOST_BUILD)
+    return true;
+#else
     int r = smsg.Write(buf, sizeof(buf));
-    //printf("msg write => %d\n", r);
     return (r == sizeof(buf));
+#endif
 }
 
 void Display::_DrawPoint(uint8_t x, uint8_t y, bool on)
