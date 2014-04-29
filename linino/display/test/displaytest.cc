@@ -52,6 +52,17 @@ int main(void)
 
     msleep(2000);
     display.ClearDisplayBuffer();
+    printf("Draw chars\n");
+    char *str = "AllJoyn Rocks";
+    while (*str != 0) {
+        display.DrawChar(*str);
+        msleep(300);
+        str++;
+    }
+    display.DrawChar(' ');
+
+    msleep(2000);
+    display.ClearDisplayBuffer();
     printf("Draw points on\n");
     for (y = 0; y < 9; ++y) {
         for (x = 0; x < 14; x += (y + 1)) {

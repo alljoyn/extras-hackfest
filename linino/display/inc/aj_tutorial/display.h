@@ -112,6 +112,15 @@ class Display
     bool DrawBitmap(const uint16_t* bitmap) { return DrawBitmapBuffer(bitmap) && SendDisplay(); }
 
     /**
+     * Sends a character directly to the LOL shield for display.
+     *
+     * @param char      character to display
+     *
+     * @return  true if successfully displayed, false otherwise (communication error)
+     */
+    bool DrawChar(const char c);
+
+    /**
      * Send the display buffer to the Arduino side for display.
      */
     bool SendDisplay();

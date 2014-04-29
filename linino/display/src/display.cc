@@ -29,6 +29,8 @@
 #include <aj_tutorial/display.h>
 #include <aj_tutorial/smsg.h>
 
+#include "font5x7.h"
+
 #define dbg 0
 
 using namespace std;
@@ -149,6 +151,25 @@ bool Display::DrawBitmapBuffer(const uint16_t* bitmap)
 {
     memcpy(display, bitmap, sizeof(display));
     return true;
+}
+
+bool Display::DrawChar(char c)
+{
+    unsigned char *line;
+    uint16_t bitmap[9];
+
+    // use '.' for chars out of range
+    if (c < 0x20 || c > 0x7f) {
+        c = '.';
+    }
+
+    line = Font5x7 + (((int) (c - ' ')) * 5);
+
+    // center char to columns 2-7, and shift up to center rows
+    for (int i=0; i<9; i++) {
+        bitmap[i] = (i>1 && i<7) ? *line++ << 4 : 0x0000;
+    }
+    DrawBitmap(bitmap);
 }
 
 bool Display::SendDisplay()
