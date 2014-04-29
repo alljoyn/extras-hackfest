@@ -17,11 +17,13 @@
 #include <alljoyn/BusAttachment.h>
 #include <alljoyn/about/AboutClient.h>
 #include <alljoyn/about/AnnouncementRegistrar.h>
+#include <qcc/StringUtil.h>
 
 #include <signal.h>
 #include <iostream>
 #include <iomanip>
-#include <cstdio>
+#include <stdio.h>
+#include <stdlib.h>
 
 using namespace ajn;
 using namespace services;
@@ -29,8 +31,6 @@ using namespace qcc;
 
 static const char* HELLO_WORLD_INTERFACE_NAME = "com.samples.helloworld";
 static qcc::String remoteHelloWorldObjectPath = "";
-
-static volatile sig_atomic_t quit;
 
 typedef void (*AnnounceHandlerCallback)(qcc::String const& busName, unsigned short port);
 
@@ -161,17 +161,6 @@ static void cleanup()
     }
 }
 
-static void SignalHandler(int sig)
-{
-    switch (sig) {
-    case SIGINT:
-    case SIGTERM:
-        quit = 1;
-        cleanup();
-        break;
-    }
-}
-
 static QStatus BuildBusObject(HelloWorldSignalHandlerBusObject*& helloWorldSignalHandlerBusObject)
 {
     InterfaceDescription* intf = NULL;
@@ -183,13 +172,13 @@ static QStatus BuildBusObject(HelloWorldSignalHandlerBusObject*& helloWorldSigna
 	}
 
 	printf("Interface created.\n");
-	intf->AddMethod("helloWorld", NULL,  NULL, NULL, 0);
+	status = intf->AddMethod("helloWorld", NULL,  NULL, NULL, 0);
 	if (ER_OK != status) {
 		std::cout << "Error in AddMethod (" << QCC_StatusText(status) << ")." << std::endl;
 		cleanup();
 		return ER_FAIL;
 	}
-	intf->AddSignal("helloWorldSignal", NULL, NULL, 0);
+	status = intf->AddSignal("helloWorldSignal", NULL, NULL, 0);
 	if (ER_OK != status) {
 		std::cout << "Error in AddSignal (" << QCC_StatusText(status) << ")." << std::endl;
 		cleanup();
@@ -211,7 +200,7 @@ static QStatus BuildBusObject(HelloWorldSignalHandlerBusObject*& helloWorldSigna
 		return ER_FAIL;
 	}
 
-	busAttachment->AddMatch("type='signal',interface='com.samples.helloworld',member='helloWorldSignal'");
+	status = busAttachment->AddMatch("type='signal',interface='com.samples.helloworld',member='helloWorldSignal'");
 	if (ER_OK != status) {
 		std::cout << "Error in AddMatch (type='signal') (" << QCC_StatusText(status) << ")." << std::endl;
 		cleanup();
@@ -256,25 +245,52 @@ void makeHelloWorldCall(const qcc::String& uniqueName,
 	}
 }
 
+/*
+ * get a line of input from the the file pointer (most likely stdin).
+ * This will capture the the num-1 characters or till a newline character is
+ * entered.
+ *
+ * @param[out] str a pointer to a character array that will hold the user input
+ * @param[in]  num the size of the character array 'str'
+ * @param[in]  fp  the file pointer the sting will be read from. (most likely stdin)
+ *
+ * @return returns the same string as 'str' if there has been a read error a null
+ *                 pointer will be returned and 'str' will remain unchanged.
+ */
+char* get_line(char*str, size_t num, FILE*fp)
+{
+    char*p = fgets(str, num, fp);
+
+    // fgets will capture the '\n' character if the string entered is shorter than
+    // num. Remove the '\n' from the end of the line and replace it with nul '\0'.
+    if (p != NULL) {
+        size_t last = strlen(str) - 1;
+        if (str[last] == '\n') {
+            str[last] = '\0';
+        }
+    }
+    return p;
+}
+
+static String NextToken(String& inStr)
+{
+    String ret;
+    size_t off = inStr.find_first_of(' ');
+    if (off == String::npos) {
+        ret = inStr;
+        inStr.clear();
+    } else {
+        ret = inStr.substr(0, off);
+        inStr = Trim(inStr.substr(off));
+    }
+    return Trim(ret);
+}
+
+
 int main(int argc, char**argv, char**envArg)
 {
 	std::cout << "AllJoyn Library version: " << ajn::GetVersion() << std::endl;
 	std::cout << "AllJoyn Library build info: " << ajn::GetBuildInfo() << std::endl;
-
-    struct sigaction act, oldact;
-    sigset_t sigmask, waitmask;
-
-    // Block all signals by default for all threads.
-    sigfillset(&sigmask);
-    sigdelset(&sigmask, SIGSEGV);
-    pthread_sigmask(SIG_BLOCK, &sigmask, NULL);
-
-    // Setup a handler for SIGINT and SIGTERM
-    act.sa_handler = SignalHandler;
-    sigemptyset(&act.sa_mask);
-    act.sa_flags = SA_SIGINFO | SA_RESTART;
-    sigaction(SIGINT, &act, &oldact);
-    sigaction(SIGTERM, &act, &oldact);
 
     // Create message bus
     busAttachment = new BusAttachment("HelloWorldClient", true);
@@ -327,17 +343,19 @@ int main(int argc, char**argv, char**envArg)
 		return EXIT_FAILURE;
 	}
 
-    // Setup signals to wait for.
-    sigfillset(&waitmask);
-    sigdelset(&waitmask, SIGINT);
-    sigdelset(&waitmask, SIGTERM);
-
-    quit = 0;
-    while (!quit) {
-        // Wait for a signal.
-        sigsuspend(&waitmask);
-    }
-    std::cout << "Goodbye!" << std::endl;
-    return 0;
+	const int bufSize = 1024;
+	char buf[bufSize];
+	// An input loop, to allow for easy extension of the sample that takes in input
+	while (get_line(buf, bufSize, stdin)) {
+		qcc::String line(buf);
+		qcc::String cmd = NextToken(line);
+		if (cmd == "quit") {
+			cleanup();
+			return 0;
+		} else {
+			// Let the user know how to quit this loop (or Ctrl-C)
+			std::cout << "Usage: quit\n > ";
+		}
+	}
 
 } /* main() */
