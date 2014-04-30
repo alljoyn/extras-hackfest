@@ -23,6 +23,7 @@
 #define _DISPLAY_H_
 
 #include <stdint.h>
+#include <string.h>
 
 #if !defined(HOST_BUILD)
 #include <aj_tutorial/smsg.h>
