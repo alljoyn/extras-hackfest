@@ -39,19 +39,19 @@ static volatile uint8_t readJoystick = 0;
 
 #define QUEUE_DEPTH 16
 struct Queue {
-    uint8_t q[QUEUE_DEPTH];
-    uint8_t head;
-    uint8_t tail;
+    volatile uint8_t q[QUEUE_DEPTH];
+    volatile uint8_t head;
+    volatile uint8_t tail;
     Queue(): head(0), tail(0) {}
     void Push(uint8_t v) { q[head++] = v; head %= QUEUE_DEPTH; if (head == tail) ++tail; tail %= QUEUE_DEPTH; }
-    uint8_t Pop() { uint8_t r = q[tail]; ++tail; tail %= QUEUE_DEPTH; return r; }
-    uint8_t Depth() { return head - tail + ((head < tail) ? QUEUE_DEPTH : 0); }
+    uint8_t Pop() { uint8_t r = q[tail++]; tail %= QUEUE_DEPTH; return r; }
+    uint8_t Depth() { return (head + ((head < tail) ? QUEUE_DEPTH : 0)) - tail; }
 };
 
-Queue q1;
-Queue q2;
-Queue q3;
-Queue q4;
+static Queue q1;
+static Queue q2;
+static Queue q3;
+static Queue q4;
 
 static long xSum;
 static long ySum;
@@ -198,6 +198,7 @@ int Joystick::stateChanged(void)
         ++histPos;
         histPos %= ANALOG_HISTORY;
 
+        noInterrupts();
         while ((q1.Depth() > 0) &&
                (q2.Depth() > 0) &&
                (q3.Depth() > 0) &&
@@ -207,6 +208,7 @@ int Joystick::stateChanged(void)
             r[1] = q2.Pop();
             r[2] = q3.Pop();
             r[3] = q4.Pop();
+            interrupts();
             for (uint8_t b = 0; b < numButtons; ++b) {
                 uint8_t port = digitalPinToPort(buttonMap[b]);
                 uint8_t bit = digitalPinToBitMask(buttonMap[b]);
@@ -221,7 +223,9 @@ int Joystick::stateChanged(void)
                     buttonState &= ~(1 << b);
                 }
             }
+            noInterrupts();
         }
+        interrupts();
     }
 
     int buttonChange = (oldButtonState != buttonState);
