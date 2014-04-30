@@ -21,11 +21,11 @@
 
 #include <stdio.h>
 #include <string.h>
+#include <unistd.h>
 
 #include <aj_tutorial/joystick.h>
 #if defined(HOST_BUILD)
 #include <stdlib.h>
-#include <unistd.h>
 #else
 #include <aj_tutorial/smsg.h>
 #endif
@@ -112,6 +112,8 @@ bool Joystick::SendSetCmd(uint8_t cmd, int16_t i1, int16_t i2)
     buf[2] = i1 & 0xff;
     buf[3] = i2 >> 8;
     buf[4] = i2 & 0xff;
-    return (smsg.Write(buf, sizeof(buf)) == CMD_BUF_SIZE);
+    int ret = smsg.Write(buf, sizeof(buf));
+    usleep(2000);
+    return (ret == CMD_BUF_SIZE);
 #endif
 }
