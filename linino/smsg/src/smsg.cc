@@ -35,7 +35,7 @@
 
 #include <aj_tutorial/smsg.h>
 
-#define RD_TO 500
+#define RD_TO 50
 
 #define BAUDRATE B230400
 
@@ -188,7 +188,7 @@ int SMsg::WriteMsg(const uint8_t* buf, uint8_t len)
         return -5;
     }
 
-    usleep(RD_TO * 2);
+    usleep(RD_TO * 2 * 1000);
 
     return len;
 }
@@ -237,7 +237,7 @@ bool SMsg::WaitForMsg(uint32_t timeout)
 {
     if (fd > 0) {
         fd_set rfds;
-        struct timeval to = { 0, timeout };
+        struct timeval to = { 0, timeout * 1000 };
         FD_ZERO(&rfds);
         FD_SET(fd, &rfds);
         return (select(fd + 1, &rfds, NULL, NULL, &to) > 0);

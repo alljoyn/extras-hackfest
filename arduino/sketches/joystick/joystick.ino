@@ -91,9 +91,6 @@ void processCommand(byte* buf, uint8_t bufSize)
       if (bufSize == 5) {
         Serial.println("Set Y range");
         js.setYRange(i1, i2);
-      } else {
-        Serial.print("invalid buf size for set Y: ");
-        Serial.println(bufSize);
       }
       break;
 
@@ -103,10 +100,5 @@ void processCommand(byte* buf, uint8_t bufSize)
         js.reset();
       }
       break;
-    
-    default:
-      Serial.println("Invalid command");
-      break;
   }
 }
-

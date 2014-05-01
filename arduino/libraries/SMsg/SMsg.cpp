@@ -21,14 +21,14 @@
 
 #include "SMsg.h"
 
-#define RD_TO 500
+#define RD_TO 50
 
 #define BAUDRATE 250000
 
 static char waitRX(long ms)
 {
-    long expire = (long)micros() + ms;
-    while (expire - (long)micros() > 0) {
+    long expire = (long)millis() + ms;
+    while (expire - (long)millis() > 0) {
         if (Serial1.available()) {
             return 1;
         }
@@ -146,7 +146,7 @@ int SMsg::writeMsg(const byte* buf, int len)
     _write((sum >> 8) & 0xff);
     _write(sum & 0xff);
 
-    delayMicroseconds(RD_TO * 2);
+    delay(RD_TO * 2);
 
     return len;
 }
@@ -176,23 +176,19 @@ void SMsg::flushRX(void)
 void SMsg::detectReboot(uint8_t c)
 {
     static const char bootStr1[] = "Arduino Yun (ar9331) U-boot";
-    static const char bootStr2[] = "Top of RAM usable for U-Boot at: 84000000";
-    static const char bootStr3[] = "Now running in RAM - U-Boot at: 83fdc000";
-    static const char bootStr4[] = "Hit any key to stop autoboot";
+    static const char bootStr2[] = "## Booting image at 9fea0000 ...";
+    static const char bootStr3[] = "## Transferring control to Linux (at address 80060000) ...";
     static uint8_t mPos1 = 0;
     static uint8_t mPos2 = 0;
     static uint8_t mPos3 = 0;
-    static uint8_t mPos4 = 0;
 
     updatePos(c, mPos1, bootStr1);
     updatePos(c, mPos2, bootStr2);
     updatePos(c, mPos3, bootStr3);
-    updatePos(c, mPos4, bootStr4);
 
     if (checkBoot(mPos1, bootStr1) ||
         checkBoot(mPos2, bootStr2) ||
-        checkBoot(mPos3, bootStr3) ||
-        checkBoot(mPos4, bootStr4)) {
+        checkBoot(mPos3, bootStr3)) {
         rebooting = 1;
     }
 }
