@@ -36,7 +36,7 @@
 #if defined(HOST_BUILD)
 #define dbg 1
 #else
-#define dbg 0
+#define dbg 1
 #endif
 
 using namespace std;
