@@ -1,0 +1,55 @@
+import os
+
+env = Environment()
+
+if os.environ.has_key('TARGET_CC_NOCACHE'):
+    env.Replace(CC = os.environ['TARGET_CC_NOCACHE'])
+if os.environ.has_key('TARGET_CXX_NOCACHE'):
+    env.Replace(CXX = os.environ['TARGET_CXX_NOCACHE'])
+if os.environ.has_key('TARGET_LINK'):
+    env.Replace(LINK = os.environ['TARGET_LINK'])
+if os.environ.has_key('STAGING_DIR'):
+    env['ENV']['STAGING_DIR'] = os.environ.get('STAGING_DIR', '')
+if os.environ.has_key('TARGET_PATH'):
+    env['ENV']['PATH'] = ':'.join([ os.environ['TARGET_PATH'], env['ENV']['PATH'] ] )
+if os.environ.has_key('TARGET_CFLAGS'):
+    env.Append(CFLAGS=os.environ['TARGET_CFLAGS'].split())
+    env.Append(CXXFLAGS=os.environ['TARGET_CFLAGS'].split())
+if os.environ.has_key('EXTRA_CFLAGS'):
+    env.Append(CFLAGS=os.environ['EXTRA_CFLAGS'].split())
+    env.Append(CXXFLAGS=os.environ['EXTRA_CFLAGS'].split())
+if os.environ.has_key('TARGET_CPPFLAGS'):
+    env.Append(CFLAGS=os.environ['TARGET_CPPFLAGS'].split())
+if os.environ.has_key('TARGET_LINKFLAGS'):
+    env.Append(LINKFLAGS=os.environ['TARGET_LINKFLAGS'].split())
+if os.environ.has_key('TARGET_LDFLAGS'):
+    env.Append(LDFLAGS=os.environ['TARGET_LDFLAGS'].split())
+
+env.Append(CFLAGS=['-Os',
+                     '-g',
+                   '-Wall',
+                   '-pipe',
+                   '-funsigned-char',
+                   '-Wpointer-sign',
+                   '-Wimplicit-function-declaration',
+                   '-fno-strict-aliasing'])
+env.Append(CXXFLAGS=['-Os',
+                     '-g',
+                     '-Wall',
+                     '-pipe',
+                     '-funsigned-char',
+                     '-fno-strict-aliasing'])
+env.Append(LINKFLAGS=['-g'])
+env.Append(CPPPATH=env.Dir('./inc'));
+env.Append(CPPDEFINES = ['QCC_OS_GROUP_POSIX'])
+
+commonObj = env.Object('common.cc')
+
+dispEnv = env.Clone();
+jsEnv = env.Clone();
+
+dispEnv.Append(LIBS = ['display', 'smsg', 'alljoyn', 'pthread'])
+jsEnv.Append(LIBS = ['joystick', 'smsg', 'alljoyn', 'pthread'])
+
+dispEnv.Program('ajdisptest', ['ajdisptest.cc', commonObj])
+jsEnv.Program('ajjstest', ['ajjstest.cc', commonObj])
