@@ -29,7 +29,7 @@ enum {
 
 
 const uint8_t buttonMap[]= { 7, 6, 5, 4, 3, 8, 9 };
-Joystick js(A1, A0, 0, 996, 0, 996,
+Joystick js(A1, A0, 0, 990, 0, 990,
             buttonMap, sizeof(buttonMap) / sizeof(buttonMap[0]), 0);
 
 SMsg smsg;

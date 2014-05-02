@@ -266,7 +266,7 @@ int Joystick::AxisInfo::scaleAnalog(long val)
     int calOffset;
     int calScale;
     int outOffset = outMin;
-    int outScale = (outMax - outMin) / 2;
+    int outScale = outMax - outMin;
 
     val = (val + ANALOG_HISTORY / 2) / ANALOG_HISTORY;
 
@@ -292,7 +292,7 @@ int Joystick::AxisInfo::scaleAnalog(long val)
     }
 
     if (outScale < 0) {
-        return (int)((((val * outScale) - (calScale / 2)) / calScale) + outOffset);
+        return (int)(((((val * outScale + 1) / 2) - (calScale / 2)) / calScale) + outOffset);
     }
-    return (int)((((val * outScale) + (calScale / 2)) / calScale) + outOffset);
+    return (int)(((((val * outScale + 1) / 2) + (calScale / 2)) / calScale) + outOffset);
 }
