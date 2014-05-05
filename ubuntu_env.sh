@@ -21,12 +21,13 @@ for f in $ALLJOYN_ROOT/hackfest/aj_samples/*; do export PATH=$PATH:$f/build; don
 
 build() {
     pushd $1
-    scons WS=no
+    scons WS=off
     popd
 }
 
 m() {
     if [ "$1" == "hackfest" ]; then
+        for f in $ALLJOYN_ROOT/hackfest/linino/*; do build $f; done
         for f in $ALLJOYN_ROOT/hackfest/aj_samples/*; do build $f; done
     else
         build $ALLJOYN_ROOT/hackfest/aj_samples/$1
