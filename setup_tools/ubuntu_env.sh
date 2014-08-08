@@ -29,6 +29,8 @@ m() {
     if [ "$1" == "hackfest" ]; then
         for f in $ALLJOYN_ROOT/hackfest/linino/*; do build $f; done
         for f in $ALLJOYN_ROOT/hackfest/aj_samples/*; do build $f; done
+    elif [ "$1" == "tutorial" ]; then
+        for f in $ALLJOYN_ROOT/hackfest/tutorial/*; do build $f; done
     else
         build $ALLJOYN_ROOT/hackfest/aj_samples/$1
     fi
