@@ -72,7 +72,6 @@ void CommandLineController::initialize()
 #endif
 
     controlPanelService = ControlPanelService::getInstance();
-    controlPanelService->setLogLevel(Log::LogLevel::LEVEL_ERROR);
 
     srpKeyXListener = new SrpKeyXListener();
 

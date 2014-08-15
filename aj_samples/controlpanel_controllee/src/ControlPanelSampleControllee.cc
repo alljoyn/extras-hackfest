@@ -177,9 +177,6 @@ int32_t main()
 		return ER_OUT_OF_MEMORY;
 	}
 
-    // Set loglevel
-    controlPanelService->setLogLevel(LEVEL_WARN);
-
     busAttachment = new BusAttachment("ControlPanelSampleControllee", true);
     if (NULL == busAttachment) {
 		std::cout << "Could not initialize BusAttachment." << std::endl;
