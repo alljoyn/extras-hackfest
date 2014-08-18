@@ -124,7 +124,7 @@ void loop() {
             Serial.print(pinConf->pinName);
             Serial.print(" = ");
             Serial.println(pinConf->state, DEC);
-            sendResponse('i', pinConf, state);
+            sendResponse('i', pinConf, state ? PIN_INTERRUPT_TRIGGER_ON_RISE : PIN_INTERRUPT_TRIGGER_ON_FALL);
           }
         }
       }
@@ -248,7 +248,12 @@ void togglePinCmd(PinConf* pinConf)
 void setInterruptCmd(PinConf* pinConf, uint16_t arg)
 {
   if ((pinConf->config == PIN_CONFIG_INPUT) || (pinConf->config == PIN_CONFIG_INPUT_PULLUP)) {
-    pinConf->trigMode = arg & 0x0f;
+    uint8_t trigMode = arg & 0x0f;
+    if (trigMode) {
+      pinConf->trigMode |= trigMode;
+    } else {
+      pinConf->trigMode = 0;
+    }
     pinConf->trigDebounce = arg >> 8;
   }
 }
