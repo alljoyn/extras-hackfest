@@ -104,10 +104,10 @@ void loop() {
   }
   for (int pin = 0; pin < (ArraySize(digitalPinConf) + ArraySize(analogPinConf)); ++pin) {
     PinConf* pinConf;
-    if (pin < sizeof(digitalPinConf)) {
+    if (pin < ArraySize(digitalPinConf)) {
       pinConf = &digitalPinConf[pin];
     } else {
-      pinConf = &analogPinConf[pin - sizeof(digitalPinConf)];
+      pinConf = &analogPinConf[pin - ArraySize(digitalPinConf)];
     }
     int trigMode = pinConf->trigMode;
     int trigDebounce = pinConf->trigDebounce;
